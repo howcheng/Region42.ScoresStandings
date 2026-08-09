@@ -9,7 +9,13 @@ using Microsoft.AspNetCore.Authorization;
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
-builder.Services.AddControllersWithViews();
+var mvcBuilder = builder.Services.AddControllersWithViews();
+
+// Enable runtime compilation in Development environment for faster development
+if (builder.Environment.IsDevelopment())
+{
+	mvcBuilder.AddRazorRuntimeCompilation();
+}
 
 // Configure session and TempData to use session storage instead of cookies
 // This prevents 431 errors when CSV preview data exceeds cookie size limits
@@ -22,7 +28,7 @@ builder.Services.AddSession(options =>
 });
 
 // Configure TempData to use session storage instead of cookies
-builder.Services.AddSingleton<Microsoft.AspNetCore.Mvc.ViewFeatures.ITempDataProvider, 
+builder.Services.AddSingleton<Microsoft.AspNetCore.Mvc.ViewFeatures.ITempDataProvider,
 	Microsoft.AspNetCore.Mvc.ViewFeatures.SessionStateTempDataProvider>();
 
 // Register IHttpContextAccessor for audit tracking
@@ -30,14 +36,14 @@ builder.Services.AddHttpContextAccessor();
 
 // Register DbContext with connection string from configuration/user secrets
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
-    ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
+	?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
 
 builder.Services.AddDbContext<Region42DbContext>(options =>
-    options.UseNpgsql(connectionString));
+	options.UseNpgsql(connectionString));
 
 // Register IRegion42DbContext interface for dependency injection
-builder.Services.AddScoped<IRegion42DbContext>(provider => 
-    provider.GetRequiredService<Region42DbContext>());
+builder.Services.AddScoped<IRegion42DbContext>(provider =>
+	provider.GetRequiredService<Region42DbContext>());
 
 // Register generic repository using open generics
 builder.Services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
@@ -59,29 +65,29 @@ builder.Services.AddScoped<ICsvImportService, CsvImportService>();
 //    See plan documentation for details
 builder.Services.AddAuthentication(options =>
 {
-    options.DefaultScheme = "Cookies";
-    options.DefaultChallengeScheme = "Google";
+	options.DefaultScheme = "Cookies";
+	options.DefaultChallengeScheme = "Google";
 })
 .AddCookie("Cookies")
 .AddGoogle("Google", options =>
 {
-    options.ClientId = builder.Configuration["Authentication:Google:ClientId"]
-        ?? throw new InvalidOperationException("Google ClientId not found in configuration.");
-    options.ClientSecret = builder.Configuration["Authentication:Google:ClientSecret"]
-        ?? throw new InvalidOperationException("Google ClientSecret not found in configuration.");
+	options.ClientId = builder.Configuration["Authentication:Google:ClientId"]
+		?? throw new InvalidOperationException("Google ClientId not found in configuration.");
+	options.ClientSecret = builder.Configuration["Authentication:Google:ClientSecret"]
+		?? throw new InvalidOperationException("Google ClientSecret not found in configuration.");
 
-    // Request email scope to get user's email address
-    options.Scope.Add("email");
-    options.SaveTokens = true;
+	// Request email scope to get user's email address
+	options.Scope.Add("email");
+	options.SaveTokens = true;
 });
 
 // Add authorization with domain-restricted AdminPolicy
 builder.Services.AddAuthorizationBuilder()
-    .AddPolicy("AdminPolicy", policy =>
-    {
-        policy.RequireAuthenticatedUser();
-        policy.Requirements.Add(new DomainRequirement("aysoregion42.org"));
-    });
+	.AddPolicy("AdminPolicy", policy =>
+	{
+		policy.RequireAuthenticatedUser();
+		policy.Requirements.Add(new DomainRequirement("aysoregion42.org"));
+	});
 
 builder.Services.AddSingleton<IAuthorizationHandler, DomainRequirementHandler>();
 
@@ -91,43 +97,43 @@ var app = builder.Build();
 // Production migrations should be applied via deployment pipeline
 if (app.Environment.IsDevelopment())
 {
-    using (var scope = app.Services.CreateScope())
-    {
-        var dbContext = scope.ServiceProvider.GetRequiredService<Region42DbContext>();
-        var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+	using (var scope = app.Services.CreateScope())
+	{
+		var dbContext = scope.ServiceProvider.GetRequiredService<Region42DbContext>();
+		var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
 
-        try
-        {
-            var pendingMigrations = await dbContext.Database.GetPendingMigrationsAsync();
-            if (pendingMigrations.Any())
-            {
-                logger.LogInformation("Applying {Count} pending migration(s): {Migrations}", 
-                    pendingMigrations.Count(), 
-                    string.Join(", ", pendingMigrations));
+		try
+		{
+			var pendingMigrations = await dbContext.Database.GetPendingMigrationsAsync();
+			if (pendingMigrations.Any())
+			{
+				logger.LogInformation("Applying {Count} pending migration(s): {Migrations}",
+					pendingMigrations.Count(),
+					string.Join(", ", pendingMigrations));
 
-                await dbContext.Database.MigrateAsync();
+				await dbContext.Database.MigrateAsync();
 
-                logger.LogInformation("Database migrations applied successfully");
-            }
-            else
-            {
-                logger.LogInformation("Database is up to date, no pending migrations");
-            }
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "An error occurred while migrating the database");
-            throw; // Fail fast in development
-        }
-    }
+				logger.LogInformation("Database migrations applied successfully");
+			}
+			else
+			{
+				logger.LogInformation("Database is up to date, no pending migrations");
+			}
+		}
+		catch (Exception ex)
+		{
+			logger.LogError(ex, "An error occurred while migrating the database");
+			throw; // Fail fast in development
+		}
+	}
 }
 
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
 {
-    app.UseExceptionHandler("/Home/Error");
-    // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
-    app.UseHsts();
+	app.UseExceptionHandler("/Home/Error");
+	// The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
+	app.UseHsts();
 }
 
 app.UseHttpsRedirection();
@@ -142,9 +148,9 @@ app.UseAuthorization();
 app.MapStaticAssets();
 
 app.MapControllerRoute(
-    name: "default",
-    pattern: "{controller=Home}/{action=Index}/{id?}")
-    .WithStaticAssets();
+	name: "default",
+	pattern: "{controller=Home}/{action=Index}/{id?}")
+	.WithStaticAssets();
 
 
 app.Run();
