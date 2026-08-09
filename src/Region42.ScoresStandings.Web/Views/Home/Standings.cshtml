@@ -1,0 +1,361 @@
+@model Region42.ScoresStandings.Web.Models.StandingsViewModel
+@{
+	ViewData["Title"] = "Standings";
+}
+
+<div class="row mb-3">
+	<div class="col-md-12">
+		<h2>@Model.SeasonName Standings</h2>
+	</div>
+</div>
+
+@if (!string.IsNullOrEmpty(ViewBag.ErrorMessage))
+{
+	<div class="alert alert-warning" role="alert">
+		@ViewBag.ErrorMessage
+	</div>
+}
+
+<div class="row mb-3">
+	<div class="col-md-6 mb-2">
+		<label for="divisionSelect" class="form-label">Division</label>
+		<select id="divisionSelect" class="form-select" onchange="filterByDivision()">
+			@if (ViewBag.Divisions != null)
+			{
+				@Html.Raw("<option value=''>-- Select Division --</option>")
+				foreach (var item in (IEnumerable<SelectListItem>)ViewBag.Divisions)
+				{
+					<option value="@item.Value" selected="@item.Selected">@item.Text</option>
+				}
+			}
+		</select>
+	</div>
+	<div class="col-md-6 mb-2">
+		<label for="roundSelect" class="form-label">Display Through</label>
+		<select id="roundSelect" class="form-select" onchange="filterByRound()" @(Model.DivisionId == 0 ? "disabled" : "")>
+			@if (ViewBag.Rounds != null)
+			{
+				foreach (var item in (IEnumerable<SelectListItem>)ViewBag.Rounds)
+				{
+					<option value="@item.Value" selected="@item.Selected">@item.Text</option>
+				}
+			}
+		</select>
+	</div>
+</div>
+
+@if (Model.DivisionId > 0 && Model.Standings.Any())
+{
+	<div class="row">
+		<!-- Scores Column -->
+		<div class="col-lg-5 mb-4">
+			<div class="card">
+				<div class="card-header bg-primary text-white">
+					<h5 class="mb-0">
+						@if (Model.ThroughRound > 0)
+						{
+							<span>Round @Model.ThroughRound Scores</span>
+						}
+						else
+						{
+							<span>All Scores</span>
+						}
+					</h5>
+				</div>
+				<div class="card-body">
+					@if (Model.Scores.Any())
+					{
+						@* Group by round *@
+						var scoresByRound = Model.Scores.GroupBy(s => s.Round).OrderBy(g => g.Key);
+
+						foreach (var roundGroup in scoresByRound)
+						{
+							if (scoresByRound.Count() > 1)
+							{
+								<h6 class="text-muted mt-3 mb-2">Round @roundGroup.Key</h6>
+							}
+
+							<div class="list-group mb-3">
+								@foreach (var score in roundGroup.OrderBy(s => s.ScheduledDateTime))
+								{
+									<div class="list-group-item">
+										<div class="d-flex justify-content-between align-items-center">
+											<div class="flex-grow-1">
+												<div class="row">
+													<div class="col-5 text-end">
+														<strong>@score.HomeTeamName</strong>
+													</div>
+													<div class="col-2 text-center">
+														@if (score.HomeScore.HasValue && score.AwayScore.HasValue)
+														{
+															<span class="badge bg-success">@score.HomeScore - @score.AwayScore</span>
+														}
+														else
+														{
+															<span class="badge bg-secondary">vs</span>
+														}
+													</div>
+													<div class="col-5">
+														<strong>@score.AwayTeamName</strong>
+													</div>
+												</div>
+												<small class="text-muted d-block mt-1">
+													@score.ScheduledDateTime.ToString("MMM dd, h:mm tt")
+													@if (!string.IsNullOrEmpty(score.Location))
+													{
+														<span> | @score.Location</span>
+													}
+												</small>
+											</div>
+										</div>
+									</div>
+								}
+							</div>
+						}
+					}
+					else
+					{
+						<p class="text-muted">No games scheduled for this selection.</p>
+					}
+				</div>
+			</div>
+		</div>
+
+		<!-- Standings Column -->
+		<div class="col-lg-7">
+			<div class="card">
+				<div class="card-header bg-success text-white">
+					<h5 class="mb-0">
+						@Model.DivisionName Standings
+						@if (Model.ThroughRound > 0)
+						{
+							<span class="small">(Through Round @Model.ThroughRound)</span>
+						}
+					</h5>
+				</div>
+				<div class="card-body">
+					<div class="table-responsive">
+						<table class="table table-striped table-hover" id="standingsTable">
+							<thead>
+								<tr>
+									<th class="text-center d-none d-md-table-cell">#</th>
+									<th>Team</th>
+									<th class="text-center" title="Games Played">GP</th>
+									<th class="text-center" title="Wins">W</th>
+									<th class="text-center" title="Draws">D</th>
+									<th class="text-center" title="Losses">L</th>
+									<th class="text-center d-none d-lg-table-cell" title="Goals For">GF</th>
+									<th class="text-center d-none d-lg-table-cell" title="Goals Against">GA</th>
+									<th class="text-center d-none d-lg-table-cell" title="Goal Differential">GD</th>
+									<th class="text-center d-none d-md-table-cell points-detail" title="Game Points">
+										<i class="bi bi-trophy-fill"></i>
+										<span class="d-none d-lg-inline">GP</span>
+									</th>
+									<th class="text-center d-none d-md-table-cell points-detail" title="Volunteer Points">
+										<i class="bi bi-hand-thumbs-up-fill"></i>
+										<span class="d-none d-lg-inline">VP</span>
+									</th>
+									<th class="text-center">
+										<strong title="Total Points">Pts</strong>
+										<button type="button" class="btn btn-sm btn-link d-md-none p-0 ms-1" 
+												data-bs-toggle="modal" data-bs-target="#pointsLegendModal">
+											<i class="bi bi-info-circle"></i>
+										</button>
+									</th>
+								</tr>
+							</thead>
+							<tbody>
+								@foreach (var team in Model.Standings)
+								{
+									<tr class="@(team.QualifiesForPlayoffs ? "table-success" : "")">
+										<td class="text-center d-none d-md-table-cell">@team.Rank</td>
+										<td>
+											<strong class="d-none d-sm-inline">@team.TeamName</strong>
+											<strong class="d-sm-none">@team.TeamShortName</strong>
+											@if (team.QualifiesForPlayoffs)
+											{
+												<span class="badge bg-success ms-1" title="Qualifies for Playoffs">
+													<i class="bi bi-star-fill"></i>
+												</span>
+											}
+											@* Mobile points detail icon *@
+											<button type="button" class="btn btn-sm btn-link d-md-none p-0 ms-1" 
+													onclick="showPointsDetail('@team.TeamName', @team.GamePoints, @team.VolunteerPoints, @team.TotalPoints)">
+												<i class="bi bi-info-circle"></i>
+											</button>
+										</td>
+										<td class="text-center">@team.GamesPlayed</td>
+										<td class="text-center">@team.Wins</td>
+										<td class="text-center">@team.Draws</td>
+										<td class="text-center">@team.Losses</td>
+										<td class="text-center d-none d-lg-table-cell">@team.GoalsFor</td>
+										<td class="text-center d-none d-lg-table-cell">@team.GoalsAgainst</td>
+										<td class="text-center d-none d-lg-table-cell">@team.GoalDifferential</td>
+										<td class="text-center d-none d-md-table-cell points-detail">@team.GamePoints</td>
+										<td class="text-center d-none d-md-table-cell points-detail">@team.VolunteerPoints</td>
+										<td class="text-center"><strong>@team.TotalPoints</strong></td>
+									</tr>
+								}
+							</tbody>
+						</table>
+					</div>
+
+					@if (Model.Standings.Any(t => t.QualifiesForPlayoffs))
+					{
+						<div class="alert alert-success mt-3 mb-0" role="alert">
+							<i class="bi bi-star-fill"></i> Teams highlighted qualify for playoffs
+						</div>
+					}
+
+					<small class="text-muted d-block mt-2">
+						Last updated: @Model.CalculatedAt.ToString("MMM dd, yyyy h:mm tt")
+					</small>
+				</div>
+			</div>
+		</div>
+	</div>
+}
+else if (Model.DivisionId > 0)
+{
+	<div class="alert alert-info" role="alert">
+		No standings data available for the selected division.
+	</div>
+}
+
+<!-- Mobile Points Detail Modal -->
+<div class="modal fade" id="pointsDetailModal" tabindex="-1" aria-labelledby="pointsDetailModalLabel" aria-hidden="true">
+	<div class="modal-dialog modal-dialog-centered">
+		<div class="modal-content">
+			<div class="modal-header">
+				<h5 class="modal-title" id="pointsDetailModalLabel">Points Breakdown</h5>
+				<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+			</div>
+			<div class="modal-body">
+				<h6 id="modalTeamName" class="mb-3"></h6>
+				<table class="table table-sm">
+					<tbody>
+						<tr>
+							<td><i class="bi bi-trophy-fill"></i> Game Points:</td>
+							<td class="text-end"><strong id="modalGamePoints"></strong></td>
+						</tr>
+						<tr>
+							<td><i class="bi bi-hand-thumbs-up-fill"></i> Volunteer Points:</td>
+							<td class="text-end"><strong id="modalVolunteerPoints"></strong></td>
+						</tr>
+						<tr class="table-active">
+							<td><strong>Total Points:</strong></td>
+							<td class="text-end"><strong id="modalTotalPoints"></strong></td>
+						</tr>
+					</tbody>
+				</table>
+			</div>
+		</div>
+	</div>
+</div>
+
+<!-- Points Legend Modal (for mobile header info) -->
+<div class="modal fade" id="pointsLegendModal" tabindex="-1" aria-labelledby="pointsLegendModalLabel" aria-hidden="true">
+	<div class="modal-dialog modal-dialog-centered">
+		<div class="modal-content">
+			<div class="modal-header">
+				<h5 class="modal-title" id="pointsLegendModalLabel">Points System</h5>
+				<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+			</div>
+			<div class="modal-body">
+				<p><strong>Total Points</strong> = Game Points + Volunteer Points</p>
+				<hr />
+				<p class="mb-2"><strong>Game Points:</strong></p>
+				<ul>
+					<li>Win: 3 points</li>
+					<li>Draw: 1 point</li>
+					<li>Loss: 0 points</li>
+				</ul>
+				<p class="mb-2"><strong>Volunteer Points:</strong></p>
+				<ul>
+					<li>Awarded for volunteer activities</li>
+					<li>Added to game points</li>
+				</ul>
+				<p class="text-muted mb-0">
+					<small>Tap the <i class="bi bi-info-circle"></i> icon next to any team to see their points breakdown.</small>
+				</p>
+			</div>
+		</div>
+	</div>
+</div>
+
+@section Scripts {
+	<script>
+		function filterByDivision() {
+			const divisionId = document.getElementById('divisionSelect').value;
+			const roundSelect = document.getElementById('roundSelect');
+
+			if (divisionId) {
+				roundSelect.disabled = false;
+				window.location.href = '@Url.Action("Standings", "Home")?divisionId=' + divisionId;
+			} else {
+				roundSelect.disabled = true;
+				window.location.href = '@Url.Action("Standings", "Home")';
+			}
+		}
+
+		function filterByRound() {
+			const divisionId = document.getElementById('divisionSelect').value;
+			const throughRound = document.getElementById('roundSelect').value;
+
+			if (divisionId) {
+				let url = '@Url.Action("Standings", "Home")?divisionId=' + divisionId;
+				if (throughRound) {
+					url += '&throughRound=' + throughRound;
+				}
+				window.location.href = url;
+			}
+		}
+
+		function showPointsDetail(teamName, gamePoints, volunteerPoints, totalPoints) {
+			document.getElementById('modalTeamName').textContent = teamName;
+			document.getElementById('modalGamePoints').textContent = gamePoints;
+			document.getElementById('modalVolunteerPoints').textContent = volunteerPoints;
+			document.getElementById('modalTotalPoints').textContent = totalPoints;
+
+			const modal = new bootstrap.Modal(document.getElementById('pointsDetailModal'));
+			modal.show();
+		}
+	</script>
+
+	<style>
+		/* Enhanced table styling */
+		#standingsTable thead th {
+			background-color: #f8f9fa;
+			font-weight: 600;
+			position: sticky;
+			top: 0;
+			z-index: 10;
+		}
+
+		#standingsTable tbody tr.table-success {
+			background-color: #d1e7dd !important;
+		}
+
+		/* Responsive column adjustments */
+		@@media (max-width: 767.98px) {
+			#standingsTable {
+				font-size: 0.875rem;
+			}
+
+			#standingsTable th,
+			#standingsTable td {
+				padding: 0.5rem 0.25rem;
+			}
+		}
+
+		/* Scores card styling */
+		.list-group-item {
+			border-left: 4px solid #0d6efd;
+			margin-bottom: 0.5rem;
+		}
+
+		.list-group-item:hover {
+			background-color: #f8f9fa;
+		}
+	</style>
+}

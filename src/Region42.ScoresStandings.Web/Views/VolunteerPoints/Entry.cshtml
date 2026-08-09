@@ -1,0 +1,241 @@
+@model Region42.ScoresStandings.Web.Controllers.VolunteerPointsGridViewModel
+
+@{
+	ViewData["Title"] = "Volunteer Points Entry";
+	var divisions = ViewBag.Divisions as SelectList;
+}
+
+<h2>Volunteer Points Entry</h2>
+<hr />
+
+@if (!string.IsNullOrEmpty(ViewBag.ErrorMessage))
+{
+	<div class="alert alert-danger" role="alert">
+		@ViewBag.ErrorMessage
+	</div>
+}
+
+<div class="row mb-4">
+	<div class="col-md-6">
+		<label for="divisionSelect" class="form-label">Division</label>
+		<select id="divisionSelect" class="form-select" onchange="reloadPage()">
+			<option value="">-- Select Division --</option>
+			@if (divisions != null)
+			{
+				foreach (var division in divisions)
+				{
+					<option value="@division.Value" selected="@(division.Selected)">@division.Text</option>
+				}
+			}
+		</select>
+	</div>
+</div>
+
+@if (Model != null && Model.Teams != null && Model.Teams.Any())
+{
+	<form asp-action="Entry" method="post">
+		<input type="hidden" asp-for="DivisionId" />
+		<input type="hidden" asp-for="DivisionName" />
+		<input type="hidden" asp-for="TotalRounds" />
+
+		<div class="alert alert-info mb-3" role="alert">
+			<strong>@Model.DivisionName</strong> - @Model.TotalRounds rounds
+		</div>
+
+		<div class="table-responsive">
+			<table class="table table-bordered table-hover table-sm">
+				<thead class="table-light">
+					<tr>
+						<th style="min-width: 150px;">Team</th>
+						@for (int round = 1; round <= Model.TotalRounds; round++)
+						{
+							<th class="text-center" style="min-width: 80px;">Round @round</th>
+						}
+					</tr>
+				</thead>
+				<tbody>
+					@for (int teamIndex = 0; teamIndex < Model.Teams.Count; teamIndex++)
+					{
+						var team = Model.Teams[teamIndex];
+						<tr>
+							<td class="align-middle">
+								<strong>@team.TeamName</strong>
+								<input type="hidden" name="Teams[@teamIndex].TeamId" value="@team.TeamId" />
+								<input type="hidden" name="Teams[@teamIndex].TeamName" value="@team.TeamName" />
+							</td>
+							@for (int roundIndex = 0; roundIndex < team.RoundPoints.Count; roundIndex++)
+							{
+								var cell = team.RoundPoints[roundIndex];
+								<td class="text-center p-1">
+									<input type="hidden" name="Teams[@teamIndex].RoundPoints[@roundIndex].Round" value="@cell.Round" />
+									<input type="hidden" name="Teams[@teamIndex].RoundPoints[@roundIndex].VolunteerPointsId" value="@cell.VolunteerPointsId" />
+									<input type="number" 
+										   name="Teams[@teamIndex].RoundPoints[@roundIndex].Points" 
+										   value="@cell.Points" 
+										   class="form-control form-control-sm text-center" 
+										   min="0" 
+										   max="99"
+										   style="width: 70px; margin: 0 auto;"
+										   title="@team.TeamName - Round @cell.Round: @cell.Points points" />
+									@if (!string.IsNullOrEmpty(cell.Notes))
+									{
+										<small class="text-muted d-block" style="font-size: 0.7rem;" title="@cell.Notes">
+											<i class="bi bi-info-circle"></i>
+										</small>
+									}
+								</td>
+							}
+						</tr>
+					}
+				</tbody>
+			</table>
+		</div>
+
+		<div class="mt-3">
+			<button type="submit" class="btn btn-primary">
+				<i class="bi bi-save"></i> Save All Points
+			</button>
+			<a asp-action="Entry" asp-route-divisionId="@Model.DivisionId" class="btn btn-secondary">
+				<i class="bi bi-arrow-clockwise"></i> Reset
+			</a>
+		</div>
+	</form>
+
+	<div class="alert alert-info mt-4" role="alert">
+		<strong>Instructions:</strong>
+		<ul class="mb-0">
+			<li>Enter volunteer points for each team in each round.</li>
+			<li>Empty fields or zero values mean no volunteer points for that round.</li>
+			<li>You can edit points for any team in any week for error correction.</li>
+			<li>All changes are saved when you click "Save All Points".</li>
+		</ul>
+	</div>
+}
+else if (Model != null && Model.DivisionId > 0)
+{
+	<div class="alert alert-warning" role="alert">
+		No teams found for this division.
+	</div>
+}
+else
+{
+	<div class="alert alert-info" role="alert">
+		Please select a division to view and enter volunteer points.
+	</div>
+}
+
+@section Scripts {
+	<script>
+		function reloadPage() {
+			const divisionId = document.getElementById('divisionSelect').value;
+			let url = '@Url.Action("Entry", "VolunteerPoints")';
+
+			if (divisionId) {
+				url += '?divisionId=' + divisionId;
+			}
+
+			window.location.href = url;
+		}
+
+		// Add highlighting on hover for better UX in large grids
+		document.addEventListener('DOMContentLoaded', function() {
+			const table = document.querySelector('table');
+			if (table) {
+				const inputs = table.querySelectorAll('input[type="number"]');
+				inputs.forEach(input => {
+					input.addEventListener('focus', function() {
+						// Highlight the row and column
+						const td = this.closest('td');
+						const tr = this.closest('tr');
+						const colIndex = Array.from(tr.children).indexOf(td);
+
+						// Highlight row
+						tr.style.backgroundColor = '#fff3cd';
+
+						// Highlight column header
+						const thead = table.querySelector('thead tr');
+						thead.children[colIndex].style.backgroundColor = '#fff3cd';
+					});
+
+					input.addEventListener('blur', function() {
+						// Remove highlight
+						const td = this.closest('td');
+						const tr = this.closest('tr');
+						const colIndex = Array.from(tr.children).indexOf(td);
+
+						tr.style.backgroundColor = '';
+
+						const thead = table.querySelector('thead tr');
+						thead.children[colIndex].style.backgroundColor = '';
+					});
+
+					// Handle Tab key to move vertically (down through teams in same round)
+					input.addEventListener('keydown', function(e) {
+						if (e.key === 'Tab' && !e.shiftKey) {
+							e.preventDefault();
+
+							const td = this.closest('td');
+							const tr = this.closest('tr');
+							const tbody = table.querySelector('tbody');
+							const rows = Array.from(tbody.querySelectorAll('tr'));
+							const colIndex = Array.from(tr.children).indexOf(td);
+							const rowIndex = rows.indexOf(tr);
+
+							// Try to move to next row in same column
+							if (rowIndex < rows.length - 1) {
+								const nextRow = rows[rowIndex + 1];
+								const nextInput = nextRow.children[colIndex]?.querySelector('input[type="number"]');
+								if (nextInput) {
+									nextInput.focus();
+									nextInput.select();
+									return;
+								}
+							}
+
+							// If at last row, move to first row of next column
+							if (colIndex < tr.children.length - 1) {
+								const firstRow = rows[0];
+								const nextColInput = firstRow.children[colIndex + 1]?.querySelector('input[type="number"]');
+								if (nextColInput) {
+									nextColInput.focus();
+									nextColInput.select();
+								}
+							}
+						} else if (e.key === 'Tab' && e.shiftKey) {
+							// Handle Shift+Tab to move up through teams in same round
+							e.preventDefault();
+
+							const td = this.closest('td');
+							const tr = this.closest('tr');
+							const tbody = table.querySelector('tbody');
+							const rows = Array.from(tbody.querySelectorAll('tr'));
+							const colIndex = Array.from(tr.children).indexOf(td);
+							const rowIndex = rows.indexOf(tr);
+
+							// Try to move to previous row in same column
+							if (rowIndex > 0) {
+								const prevRow = rows[rowIndex - 1];
+								const prevInput = prevRow.children[colIndex]?.querySelector('input[type="number"]');
+								if (prevInput) {
+									prevInput.focus();
+									prevInput.select();
+									return;
+								}
+							}
+
+							// If at first row, move to last row of previous column
+							if (colIndex > 1) { // colIndex > 1 because 0 is the team name column
+								const lastRow = rows[rows.length - 1];
+								const prevColInput = lastRow.children[colIndex - 1]?.querySelector('input[type="number"]');
+								if (prevColInput) {
+									prevColInput.focus();
+									prevColInput.select();
+								}
+							}
+						}
+					});
+				});
+			}
+		});
+	</script>
+}

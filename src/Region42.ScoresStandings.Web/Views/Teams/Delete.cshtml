@@ -1,0 +1,121 @@
+@model Region42.ScoresStandings.Domain.Entities.Team
+
+@{
+	ViewData["Title"] = "Deactivate Team";
+}
+
+<h2>Deactivate Team</h2>
+<hr />
+
+<div class="alert alert-warning" role="alert">
+	<i class="bi bi-exclamation-triangle-fill"></i>
+	<strong>Warning:</strong> Are you sure you want to deactivate this team?
+</div>
+
+<div class="row">
+	<div class="col-md-8">
+		<div class="card">
+			<div class="card-header">
+				<h5>Team Details</h5>
+			</div>
+			<div class="card-body">
+				<dl class="row">
+					<dt class="col-sm-4">Division</dt>
+					<dd class="col-sm-8">@($"{Model.Division.AgeGroup} {Model.Division.Gender}")</dd>
+
+					<dt class="col-sm-4">Team Name</dt>
+					<dd class="col-sm-8">@Model.Name</dd>
+
+					<dt class="col-sm-4">Short Name</dt>
+					<dd class="col-sm-8">@Model.ShortName</dd>
+
+					<dt class="col-sm-4">Contact Name</dt>
+					<dd class="col-sm-8">@Model.ContactName</dd>
+
+					<dt class="col-sm-4">Contact Email</dt>
+					<dd class="col-sm-8">@Model.ContactEmail</dd>
+
+					<dt class="col-sm-4">Contact Phone</dt>
+					<dd class="col-sm-8">@Model.ContactPhone</dd>
+
+					<dt class="col-sm-4">Status</dt>
+					<dd class="col-sm-8">
+						@if (Model.IsActive)
+						{
+							<span class="badge bg-success">Active</span>
+						}
+						else
+						{
+							<span class="badge bg-secondary">Inactive</span>
+						}
+					</dd>
+
+					<dt class="col-sm-4">Region 42 Team</dt>
+					<dd class="col-sm-8">
+						@if (Model.IsRegion42Team)
+						{
+							<span><i class="bi bi-check-circle-fill text-success"></i> Yes</span>
+						}
+						else
+						{
+							<span><i class="bi bi-x-circle text-muted"></i> No (Away Region)</span>
+						}
+					</dd>
+				</dl>
+
+				<div class="border-top pt-3 mt-3">
+					<p class="text-muted small mb-0">
+						<i class="bi bi-info-circle"></i>
+						<strong>Created:</strong> @Model.CreatedAt.ToString("g") by @Model.CreatedBy
+					</p>
+					<p class="text-muted small">
+						<i class="bi bi-info-circle"></i>
+						<strong>Last modified:</strong> @Model.ModifiedAt.ToString("g") by @Model.ModifiedBy
+					</p>
+				</div>
+			</div>
+		</div>
+
+		<form asp-action="Delete" method="post" class="mt-3">
+			<input type="hidden" asp-for="Id" />
+			<button type="submit" class="btn btn-danger">
+				<i class="bi bi-trash"></i> Deactivate Team
+			</button>
+			<a asp-action="Index" class="btn btn-secondary">
+				<i class="bi bi-x-circle"></i> Cancel
+			</a>
+		</form>
+	</div>
+	<div class="col-md-4">
+		<div class="card">
+			<div class="card-header bg-info text-white">
+				<i class="bi bi-info-circle"></i> What Happens?
+			</div>
+			<div class="card-body">
+				<h6>Soft Delete (Safe)</h6>
+				<p class="small">
+					This operation performs a "soft delete" by marking the team as inactive.
+				</p>
+				<h6>Data Preserved</h6>
+				<ul class="small">
+					<li>All game history is kept</li>
+					<li>Historical standings remain accurate</li>
+					<li>Volunteer points are preserved</li>
+					<li>Audit trail is maintained</li>
+				</ul>
+				<h6>Protection Rules</h6>
+				<p class="small">
+					The system will prevent deactivation if the team has:
+				</p>
+				<ul class="small">
+					<li>Scheduled future games</li>
+					<li>Games with entered scores</li>
+				</ul>
+				<h6>Reactivation</h6>
+				<p class="small">
+					Teams can be reactivated by editing them and checking the "Active" checkbox.
+				</p>
+			</div>
+		</div>
+	</div>
+</div>

@@ -1,0 +1,21 @@
+@{
+	ViewData["Title"] = "Access Denied";
+}
+
+<div class="text-center">
+	<h1 class="display-1 text-danger">403</h1>
+	<h2 class="display-4">Access Denied</h2>
+	<p class="lead">
+		You do not have permission to access this page.
+	</p>
+	<p>
+		This application is restricted to authorized AYSO Region 42 administrators.
+	</p>
+	<p>
+		If you believe you should have access, please contact your Region 42 administrator.
+	</p>
+	<hr class="my-4">
+	<a asp-controller="Home" asp-action="Standings" class="btn btn-primary">
+		<i class="bi bi-house"></i> Go to Standings
+	</a>
+</div>

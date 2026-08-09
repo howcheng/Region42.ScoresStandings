@@ -1,0 +1,149 @@
+@{
+	ViewData["Title"] = "Import Schedule from CSV";
+}
+
+<h1>Import Schedule from CSV</h1>
+
+<div class="card mb-4">
+	<div class="card-body">
+		<h5 class="card-title">Upload Instructions</h5>
+		<p class="card-text">
+			Upload a CSV file exported from SportsConnect in the "Schedule Match Report" format.
+			The system will validate the file and show a preview before importing.
+		</p>
+		<ul>
+			<li>File must be in CSV format (.csv extension)</li>
+			<li>Only events containing "Games" and age groups (10U, 12U, or 14U) will be imported</li>
+			<li>Practice events (home team = "Practice") will be skipped</li>
+			<li>Teams will be created automatically if they don't exist</li>
+			<li>Existing games for the same teams, date, and time will be skipped</li>
+		</ul>
+	</div>
+</div>
+
+<form method="post" enctype="multipart/form-data" asp-action="Upload" id="uploadForm">
+
+	<div class="card mb-4">
+		<div class="card-header">
+			<h5 class="mb-0">1. Select Season</h5>
+		</div>
+		<div class="card-body">
+			<div class="mb-3">
+				<label for="seasonId" class="form-label">Season</label>
+				<select class="form-select" id="seasonId" name="seasonId" required onchange="toggleNewSeasonName()">
+					@foreach (var option in (IEnumerable<SelectListItem>)ViewBag.SeasonOptions)
+					{
+						<option value="@option.Value">@option.Text</option>
+					}
+				</select>
+				<div class="form-text">
+					Select an empty season, or create a new one.
+					@if (ViewBag.CanReplaceDefault)
+					{
+						<br /><strong>Note:</strong> <text>The default "@ViewBag.DefaultSeasonName" season can be replaced because no Round 1 scores have been entered yet.</text>
+					}
+				</div>
+			</div>
+
+			<div class="mb-3" id="newSeasonNameDiv" style="display: none;">
+				<label for="newSeasonName" class="form-label">New Season Name (optional)</label>
+				<input type="text" class="form-control" id="newSeasonName" name="newSeasonName" placeholder="@ViewBag.DefaultSeasonName" />
+				<div class="form-text">
+					Leave blank to use default name: <strong>@ViewBag.DefaultSeasonName</strong>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<div class="card mb-4">
+		<div class="card-header">
+			<h5 class="mb-0">2. Select CSV File</h5>
+		</div>
+		<div class="card-body">
+			<div class="mb-3">
+				<label for="csvFile" class="form-label">CSV File</label>
+				<input type="file" class="form-control" id="csvFile" name="csvFile" accept=".csv" required />
+				@if (ViewData.ModelState["csvFile"]?.Errors.Count > 0)
+				{
+					<span class="text-danger">@ViewData.ModelState["csvFile"]?.Errors[0].ErrorMessage</span>
+				}
+			</div>
+		</div>
+	</div>
+
+	<div class="mb-3">
+		<button type="submit" class="btn btn-primary btn-lg">
+			<i class="bi bi-upload"></i> Validate & Preview
+		</button>
+		<a asp-controller="Home" asp-action="Standings" class="btn btn-secondary">Cancel</a>
+	</div>
+
+	@Html.AntiForgeryToken()
+</form>
+
+@if (ViewBag.ValidationErrors != null)
+{
+	var errors = ViewBag.ValidationErrors as List<string>;
+	var warnings = ViewBag.ValidationWarnings as List<string>;
+
+	<div class="card border-danger mt-4">
+		<div class="card-header bg-danger text-white">
+			<h5 class="mb-0">Validation Failed</h5>
+		</div>
+		<div class="card-body">
+			<p>
+				<strong>Total Rows:</strong> @ViewBag.TotalRows<br />
+				<strong>Valid Rows:</strong> @ViewBag.ValidRows<br />
+				<strong>Skipped Rows:</strong> @ViewBag.SkippedRows (practice events)<br />
+				<strong>Errors Found:</strong> @errors.Count
+			</p>
+
+			@if (errors != null && errors.Count > 0)
+			{
+				<div class="alert alert-danger">
+					<h6>Errors (must be fixed before import):</h6>
+					<ul>
+						@foreach (var error in errors)
+						{
+							<li>@error</li>
+						}
+					</ul>
+				</div>
+			}
+
+			@if (warnings != null && warnings.Count > 0)
+			{
+				<div class="alert alert-warning">
+					<h6>Warnings (non-critical):</h6>
+					<ul>
+						@foreach (var warning in warnings)
+						{
+							<li>@warning</li>
+						}
+					</ul>
+				</div>
+			}
+		</div>
+	</div>
+}
+
+@section Scripts {
+	<partial name="_ValidationScriptsPartial" />
+	<script>
+		function toggleNewSeasonName() {
+			var seasonId = document.getElementById('seasonId').value;
+			var newSeasonDiv = document.getElementById('newSeasonNameDiv');
+
+			if (seasonId === '0') {
+				newSeasonDiv.style.display = 'block';
+			} else {
+				newSeasonDiv.style.display = 'none';
+			}
+		}
+
+		// Initialize on page load
+		document.addEventListener('DOMContentLoaded', function() {
+			toggleNewSeasonName();
+		});
+	</script>
+}
