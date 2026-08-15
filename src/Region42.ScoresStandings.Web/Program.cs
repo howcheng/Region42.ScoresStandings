@@ -4,6 +4,7 @@ using Region42.ScoresStandings.Application.Services;
 using Region42.ScoresStandings.Domain.Interfaces;
 using Region42.ScoresStandings.Web.Data;
 using Region42.ScoresStandings.Web.Authorization;
+using Region42.ScoresStandings.Web.Middleware;
 using Microsoft.AspNetCore.Authorization;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -137,6 +138,10 @@ if (!app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+// Add Content Security Policy headers
+app.UseContentSecurityPolicy();
+
 app.UseRouting();
 
 // Enable session middleware - MUST come before UseAuthentication/UseAuthorization
