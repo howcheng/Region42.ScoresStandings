@@ -5,6 +5,10 @@
 	var divisions = ViewBag.Divisions as SelectList;
 }
 
+@section Styles {
+	<link rel="stylesheet" href="~/css/volunteer-points.css" asp-append-version="true" />
+}
+
 <h2>Volunteer Points Entry</h2>
 <hr />
 
@@ -18,7 +22,7 @@
 <div class="row mb-4">
 	<div class="col-md-6">
 		<label for="divisionSelect" class="form-label">Division</label>
-		<select id="divisionSelect" class="form-select" onchange="reloadPage()">
+		<select id="divisionSelect" class="form-select">
 			<option value="">-- Select Division --</option>
 			@if (divisions != null)
 			{
@@ -59,10 +63,10 @@
 			<table class="table table-bordered table-hover table-sm">
 				<thead class="table-light">
 					<tr>
-						<th style="min-width: 150px;">Team</th>
+						<th class="team-name-col">Team</th>
 						@for (int round = 1; round <= Model.TotalRounds; round++)
 						{
-							<th class="text-center round-column" data-round="@round" style="min-width: 80px;">Round @round</th>
+							<th class="text-center round-column" data-round="@round">Round @round</th>
 						}
 					</tr>
 				</thead>
@@ -85,14 +89,13 @@
 									<input type="number" 
 										   name="Teams[@teamIndex].RoundPoints[@roundIndex].Points" 
 										   value="@cell.Points" 
-										   class="form-control form-control-sm text-center" 
+										   class="form-control form-control-sm text-center points-input" 
 										   min="0" 
 										   max="99"
-										   style="width: 70px; margin: 0 auto;"
 										   title="@team.TeamName - Round @cell.Round: @cell.Points points" />
 									@if (!string.IsNullOrEmpty(cell.Notes))
 									{
-										<small class="text-muted d-block" style="font-size: 0.7rem;" title="@cell.Notes">
+										<small class="text-muted d-block points-note" title="@cell.Notes">
 											<i class="bi bi-info-circle"></i>
 										</small>
 									}
@@ -138,151 +141,5 @@ else
 }
 
 @section Scripts {
-	<style>
-		/* On mobile (small screens), hide all round columns by default */
-		@@media (max-width: 767px) {
-			.round-column {
-				display: none;
-			}
-			/* Show only the selected round column */
-			.round-column.active-round {
-				display: table-cell;
-			}
-		}
-	</style>
-	<script>
-		function reloadPage() {
-			const divisionId = document.getElementById('divisionSelect').value;
-			let url = '@Url.Action("Entry", "VolunteerPoints")';
-
-			if (divisionId) {
-				url += '?divisionId=' + divisionId;
-			}
-
-			window.location.href = url;
-		}
-
-		// Add highlighting on hover for better UX in large grids
-		document.addEventListener('DOMContentLoaded', function() {
-			const table = document.querySelector('table');
-			if (table) {
-				// Mobile round selector functionality
-				const roundSelect = document.getElementById('roundSelect');
-				if (roundSelect) {
-					// Show round 1 by default on mobile
-					showRound(1);
-
-					roundSelect.addEventListener('change', function() {
-						const selectedRound = parseInt(this.value);
-						showRound(selectedRound);
-					});
-				}
-
-				function showRound(roundNumber) {
-					// Hide all round columns
-					const allRoundColumns = document.querySelectorAll('.round-column');
-					allRoundColumns.forEach(col => col.classList.remove('active-round'));
-
-					// Show only the selected round
-					const selectedColumns = document.querySelectorAll(`.round-column[data-round="${roundNumber}"]`);
-					selectedColumns.forEach(col => col.classList.add('active-round'));
-				}
-
-				const inputs = table.querySelectorAll('input[type="number"]');
-				inputs.forEach(input => {
-					input.addEventListener('focus', function() {
-						// Highlight the row and column
-						const td = this.closest('td');
-						const tr = this.closest('tr');
-						const colIndex = Array.from(tr.children).indexOf(td);
-
-						// Highlight row
-						tr.style.backgroundColor = '#fff3cd';
-
-						// Highlight column header
-						const thead = table.querySelector('thead tr');
-						thead.children[colIndex].style.backgroundColor = '#fff3cd';
-					});
-
-					input.addEventListener('blur', function() {
-						// Remove highlight
-						const td = this.closest('td');
-						const tr = this.closest('tr');
-						const colIndex = Array.from(tr.children).indexOf(td);
-
-						tr.style.backgroundColor = '';
-
-						const thead = table.querySelector('thead tr');
-						thead.children[colIndex].style.backgroundColor = '';
-					});
-
-					// Handle Tab key to move vertically (down through teams in same round)
-					input.addEventListener('keydown', function(e) {
-						if (e.key === 'Tab' && !e.shiftKey) {
-							e.preventDefault();
-
-							const td = this.closest('td');
-							const tr = this.closest('tr');
-							const tbody = table.querySelector('tbody');
-							const rows = Array.from(tbody.querySelectorAll('tr'));
-							const colIndex = Array.from(tr.children).indexOf(td);
-							const rowIndex = rows.indexOf(tr);
-
-							// Try to move to next row in same column
-							if (rowIndex < rows.length - 1) {
-								const nextRow = rows[rowIndex + 1];
-								const nextInput = nextRow.children[colIndex]?.querySelector('input[type="number"]');
-								if (nextInput) {
-									nextInput.focus();
-									nextInput.select();
-									return;
-								}
-							}
-
-							// If at last row, move to first row of next column
-							if (colIndex < tr.children.length - 1) {
-								const firstRow = rows[0];
-								const nextColInput = firstRow.children[colIndex + 1]?.querySelector('input[type="number"]');
-								if (nextColInput) {
-									nextColInput.focus();
-									nextColInput.select();
-								}
-							}
-						} else if (e.key === 'Tab' && e.shiftKey) {
-							// Handle Shift+Tab to move up through teams in same round
-							e.preventDefault();
-
-							const td = this.closest('td');
-							const tr = this.closest('tr');
-							const tbody = table.querySelector('tbody');
-							const rows = Array.from(tbody.querySelectorAll('tr'));
-							const colIndex = Array.from(tr.children).indexOf(td);
-							const rowIndex = rows.indexOf(tr);
-
-							// Try to move to previous row in same column
-							if (rowIndex > 0) {
-								const prevRow = rows[rowIndex - 1];
-								const prevInput = prevRow.children[colIndex]?.querySelector('input[type="number"]');
-								if (prevInput) {
-									prevInput.focus();
-									prevInput.select();
-									return;
-								}
-							}
-
-							// If at first row, move to last row of previous column
-							if (colIndex > 1) { // colIndex > 1 because 0 is the team name column
-								const lastRow = rows[rows.length - 1];
-								const prevColInput = lastRow.children[colIndex - 1]?.querySelector('input[type="number"]');
-								if (prevColInput) {
-									prevColInput.focus();
-									prevColInput.select();
-								}
-							}
-						}
-					});
-				});
-			}
-		});
-	</script>
+	<script src="~/js/volunteer-points.js" asp-append-version="true"></script>
 }

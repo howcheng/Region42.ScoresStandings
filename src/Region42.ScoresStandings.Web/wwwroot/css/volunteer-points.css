@@ -1,0 +1,29 @@
+/* Volunteer Points Entry Page Styles */
+
+.team-name-col {
+	min-width: 150px;
+}
+
+.round-column {
+	min-width: 80px;
+}
+
+.points-input {
+	width: 70px;
+	margin: 0 auto;
+}
+
+.points-note {
+	font-size: 0.7rem;
+}
+
+/* On mobile (small screens), hide all round columns by default */
+@media (max-width: 767px) {
+	.round-column {
+		display: none;
+	}
+	/* Show only the selected round column */
+	.round-column.active-round {
+		display: table-cell;
+	}
+}

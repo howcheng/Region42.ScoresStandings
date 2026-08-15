@@ -19,7 +19,7 @@
 <div class="row mb-4">
 	<div class="col-md-6">
 		<label for="divisionSelect" class="form-label">Filter by Division</label>
-		<select id="divisionSelect" class="form-select" onchange="filterByDivision()">
+		<select id="divisionSelect" class="form-select">
 			<option value="">-- All Divisions --</option>
 			@if (divisions != null)
 			{
@@ -117,14 +117,5 @@ else
 }
 
 @section Scripts {
-	<script>
-		function filterByDivision() {
-			const divisionId = document.getElementById('divisionSelect').value;
-			if (divisionId) {
-				window.location.href = '@Url.Action("Index")?divisionId=' + divisionId;
-			} else {
-				window.location.href = '@Url.Action("Index")';
-			}
-		}
-	</script>
+	<script src="~/js/teams-index.js" asp-append-version="true"></script>
 }

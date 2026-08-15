@@ -9,6 +9,10 @@
 	var selectedRound = ViewBag.SelectedRound as int?;
 }
 
+@section Styles {
+	<link rel="stylesheet" href="~/css/scores-entry.css" asp-append-version="true" />
+}
+
 <h2>Score Entry</h2>
 <hr />
 
@@ -22,7 +26,7 @@
 <div class="row mb-4">
 	<div class="col-md-6">
 		<label for="divisionSelect" class="form-label">Division</label>
-		<select id="divisionSelect" class="form-select" onchange="reloadPage()">
+		<select id="divisionSelect" class="form-select">
 			<option value="">-- Select Division --</option>
 			@if (divisions != null)
 			{
@@ -35,7 +39,7 @@
 	</div>
 	<div class="col-md-6">
 		<label for="roundSelect" class="form-label">Round</label>
-		<select id="roundSelect" class="form-select" onchange="reloadPage()" @(selectedDivisionId.HasValue ? "" : "disabled")>
+		<select id="roundSelect" class="form-select" @(selectedDivisionId.HasValue ? "" : "disabled")>
 			<option value="">-- Select Round --</option>
 			@if (rounds != null)
 			{
@@ -100,19 +104,17 @@
 									<input type="number" 
 										   name="scores[@index].HomeScore" 
 										   value="@game.HomeScore" 
-										   class="form-control form-control-sm" 
+										   class="form-control form-control-sm score-input" 
 										   min="0" 
-										   max="99" 
-										   style="width: 70px;" />
+										   max="99" />
 								</td>
 								<td>
 									<input type="number" 
 										   name="scores[@index].AwayScore" 
 										   value="@game.AwayScore" 
-										   class="form-control form-control-sm" 
+										   class="form-control form-control-sm score-input" 
 										   min="0" 
-										   max="99" 
-										   style="width: 70px;" />
+										   max="99" />
 								</td>
 								<td>
 									<select name="scores[@index].AwayTeamId" class="form-select form-select-sm" required>
@@ -185,61 +187,5 @@ else
 }
 
 @section Scripts {
-	<script>
-		function reloadPage() {
-			const divisionId = document.getElementById('divisionSelect').value;
-			const round = document.getElementById('roundSelect').value;
-
-			// Build URL with selected parameters
-			let url = '@Url.Action("Entry", "Scores")';
-			const params = [];
-
-			if (divisionId) {
-				params.push('divisionId=' + divisionId);
-			}
-			if (round) {
-				params.push('round=' + round);
-			}
-
-			if (params.length > 0) {
-				url += '?' + params.join('&');
-			}
-
-			window.location.href = url;
-		}
-
-		// Validate that both scores are entered for each game
-		document.addEventListener('DOMContentLoaded', function() {
-			const form = document.querySelector('form[action*="Entry"]');
-			if (form) {
-				form.addEventListener('submit', function(e) {
-					const homeScores = document.querySelectorAll('input[name*="HomeScore"]');
-					const awayScores = document.querySelectorAll('input[name*="AwayScore"]');
-					let hasPartialScore = false;
-					let partialGameIndices = [];
-
-					for (let i = 0; i < homeScores.length; i++) {
-						const homeValue = homeScores[i].value.trim();
-						const awayValue = awayScores[i].value.trim();
-						const hasHome = homeValue !== '';
-						const hasAway = awayValue !== '';
-
-						// Check if only one score is entered
-						if (hasHome !== hasAway) {
-							hasPartialScore = true;
-							partialGameIndices.push(i + 1);
-						}
-					}
-
-					if (hasPartialScore) {
-						e.preventDefault();
-						alert('Error: Both home and away scores must be entered for a game to be complete.\n\n' +
-							'Games with incomplete scores: ' + partialGameIndices.join(', ') + '\n\n' +
-							'Please either enter both scores or leave both fields empty.');
-						return false;
-					}
-				});
-			}
-		});
-	</script>
+	<script src="~/js/scores-entry.js" asp-append-version="true"></script>
 }

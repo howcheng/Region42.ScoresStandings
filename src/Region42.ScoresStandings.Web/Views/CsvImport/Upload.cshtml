@@ -45,7 +45,7 @@
 				</div>
 			</div>
 
-			<div class="mb-3" id="newSeasonNameDiv" style="display: none;">
+			<div class="mb-3 hidden" id="newSeasonNameDiv">
 				<label for="newSeasonName" class="form-label">New Season Name (optional)</label>
 				<input type="text" class="form-control" id="newSeasonName" name="newSeasonName" placeholder="@ViewBag.DefaultSeasonName" />
 				<div class="form-text">
@@ -129,21 +129,5 @@
 
 @section Scripts {
 	<partial name="_ValidationScriptsPartial" />
-	<script>
-		function toggleNewSeasonName() {
-			var seasonId = document.getElementById('seasonId').value;
-			var newSeasonDiv = document.getElementById('newSeasonNameDiv');
-
-			if (seasonId === '0') {
-				newSeasonDiv.style.display = 'block';
-			} else {
-				newSeasonDiv.style.display = 'none';
-			}
-		}
-
-		// Initialize on page load
-		document.addEventListener('DOMContentLoaded', function() {
-			toggleNewSeasonName();
-		});
-	</script>
+	<script src="~/js/csv-upload.js" asp-append-version="true"></script>
 }

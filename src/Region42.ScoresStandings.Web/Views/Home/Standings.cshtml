@@ -3,6 +3,10 @@
 	ViewData["Title"] = "Standings";
 }
 
+@section Styles {
+	<link rel="stylesheet" href="~/css/standings.css" asp-append-version="true" />
+}
+
 <div class="row mb-3">
 	<div class="col-md-12">
 		<h2>@Model.SeasonName Standings</h2>
@@ -19,7 +23,7 @@
 <div class="row mb-3">
 	<div class="col-md-6 mb-2">
 		<label for="divisionSelect" class="form-label">Division</label>
-		<select id="divisionSelect" class="form-select" onchange="filterByDivision()">
+		<select id="divisionSelect" class="form-select">
 			@if (ViewBag.Divisions != null)
 			{
 				@Html.Raw("<option value=''>-- Select Division --</option>")
@@ -32,7 +36,7 @@
 	</div>
 	<div class="col-md-6 mb-2">
 		<label for="roundSelect" class="form-label">Display Through</label>
-		<select id="roundSelect" class="form-select" onchange="filterByRound()" @(Model.DivisionId == 0 ? "disabled" : "")>
+		<select id="roundSelect" class="form-select" @(Model.DivisionId == 0 ? "disabled" : "")>
 			@if (ViewBag.Rounds != null)
 			{
 				foreach (var item in (IEnumerable<SelectListItem>)ViewBag.Rounds)
@@ -189,13 +193,16 @@
 										<td class="text-center d-none d-md-table-cell points-detail">@team.GamePoints</td>
 										<td class="text-center d-none d-md-table-cell points-detail">@team.VolunteerPoints</td>
 										<td class="text-center">
-											<strong>@team.TotalPoints</strong>
-											@* Mobile points detail icon *@
-											<button type="button" class="btn btn-sm btn-link d-md-none p-0 ms-1"
-													onclick="showPointsDetail('@team.TeamName', @team.GamePoints, @team.VolunteerPoints, @team.TotalPoints)">
-												<i class="bi bi-info-circle"></i>
-											</button>
-										</td>
+												<strong>@team.TotalPoints</strong>
+												@* Mobile points detail icon *@
+												<button type="button" class="btn btn-sm btn-link d-md-none p-0 ms-1 points-detail-btn"
+														data-team-name="@team.TeamName"
+														data-game-points="@team.GamePoints"
+														data-volunteer-points="@team.VolunteerPoints"
+														data-total-points="@team.TotalPoints">
+													<i class="bi bi-info-circle"></i>
+												</button>
+											</td>
 									</tr>
 								}
 							</tbody>
@@ -286,78 +293,5 @@ else if (Model.DivisionId > 0)
 </div>
 
 @section Scripts {
-	<script>
-		function filterByDivision() {
-			const divisionId = document.getElementById('divisionSelect').value;
-			const roundSelect = document.getElementById('roundSelect');
-
-			if (divisionId) {
-				roundSelect.disabled = false;
-				window.location.href = '@Url.Action("Standings", "Home")?divisionId=' + divisionId;
-			} else {
-				roundSelect.disabled = true;
-				window.location.href = '@Url.Action("Standings", "Home")';
-			}
-		}
-
-		function filterByRound() {
-			const divisionId = document.getElementById('divisionSelect').value;
-			const throughRound = document.getElementById('roundSelect').value;
-
-			if (divisionId) {
-				let url = '@Url.Action("Standings", "Home")?divisionId=' + divisionId;
-				if (throughRound) {
-					url += '&throughRound=' + throughRound;
-				}
-				window.location.href = url;
-			}
-		}
-
-		function showPointsDetail(teamName, gamePoints, volunteerPoints, totalPoints) {
-			document.getElementById('modalTeamName').textContent = teamName;
-			document.getElementById('modalGamePoints').textContent = gamePoints;
-			document.getElementById('modalVolunteerPoints').textContent = volunteerPoints;
-			document.getElementById('modalTotalPoints').textContent = totalPoints;
-
-			const modal = new bootstrap.Modal(document.getElementById('pointsDetailModal'));
-			modal.show();
-		}
-	</script>
-
-	<style>
-		/* Enhanced table styling */
-		#standingsTable thead th {
-			background-color: #f8f9fa;
-			font-weight: 600;
-			position: sticky;
-			top: 0;
-			z-index: 10;
-		}
-
-		#standingsTable tbody tr.table-success {
-			background-color: #d1e7dd !important;
-		}
-
-		/* Responsive column adjustments */
-		@@media (max-width: 767.98px) {
-			#standingsTable {
-				font-size: 0.875rem;
-			}
-
-			#standingsTable th,
-			#standingsTable td {
-				padding: 0.5rem 0.25rem;
-			}
-		}
-
-		/* Scores card styling */
-		.list-group-item {
-			border-left: 4px solid #0d6efd;
-			margin-bottom: 0.5rem;
-		}
-
-		.list-group-item:hover {
-			background-color: #f8f9fa;
-		}
-	</style>
+	<script src="~/js/standings.js" asp-append-version="true"></script>
 }
