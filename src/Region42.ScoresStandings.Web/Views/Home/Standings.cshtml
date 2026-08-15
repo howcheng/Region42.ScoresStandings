@@ -178,11 +178,6 @@
 													<i class="bi bi-star-fill"></i>
 												</span>
 											}
-											@* Mobile points detail icon *@
-											<button type="button" class="btn btn-sm btn-link d-md-none p-0 ms-1" 
-													onclick="showPointsDetail('@team.TeamName', @team.GamePoints, @team.VolunteerPoints, @team.TotalPoints)">
-												<i class="bi bi-info-circle"></i>
-											</button>
 										</td>
 										<td class="text-center">@team.GamesPlayed</td>
 										<td class="text-center">@team.Wins</td>
@@ -193,7 +188,14 @@
 										<td class="text-center d-none d-lg-table-cell">@team.GoalDifferential</td>
 										<td class="text-center d-none d-md-table-cell points-detail">@team.GamePoints</td>
 										<td class="text-center d-none d-md-table-cell points-detail">@team.VolunteerPoints</td>
-										<td class="text-center"><strong>@team.TotalPoints</strong></td>
+										<td class="text-center">
+											<strong>@team.TotalPoints</strong>
+											@* Mobile points detail icon *@
+											<button type="button" class="btn btn-sm btn-link d-md-none p-0 ms-1"
+													onclick="showPointsDetail('@team.TeamName', @team.GamePoints, @team.VolunteerPoints, @team.TotalPoints)">
+												<i class="bi bi-info-circle"></i>
+											</button>
+										</td>
 									</tr>
 								}
 							</tbody>
@@ -276,7 +278,7 @@ else if (Model.DivisionId > 0)
 					<li>Added to game points</li>
 				</ul>
 				<p class="text-muted mb-0">
-					<small>Tap the <i class="bi bi-info-circle"></i> icon next to any team to see their points breakdown.</small>
+					<small>Tap the <i class="bi bi-info-circle"></i> icon next to any team's points total to see the breakdown.</small>
 				</p>
 			</div>
 		</div>
