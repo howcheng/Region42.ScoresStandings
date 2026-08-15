@@ -42,6 +42,19 @@
 			<strong>@Model.DivisionName</strong> - @Model.TotalRounds rounds
 		</div>
 
+		<!-- Mobile Round Selector (only visible on small screens) -->
+		<div class="row mb-3 d-md-none" id="mobileRoundSelector">
+			<div class="col-12">
+				<label for="roundSelect" class="form-label">Select Round</label>
+				<select id="roundSelect" class="form-select">
+					@for (int round = 1; round <= Model.TotalRounds; round++)
+					{
+						<option value="@round" selected="@(round == 1)">Round @round</option>
+					}
+				</select>
+			</div>
+		</div>
+
 		<div class="table-responsive">
 			<table class="table table-bordered table-hover table-sm">
 				<thead class="table-light">
@@ -49,7 +62,7 @@
 						<th style="min-width: 150px;">Team</th>
 						@for (int round = 1; round <= Model.TotalRounds; round++)
 						{
-							<th class="text-center" style="min-width: 80px;">Round @round</th>
+							<th class="text-center round-column" data-round="@round" style="min-width: 80px;">Round @round</th>
 						}
 					</tr>
 				</thead>
@@ -66,7 +79,7 @@
 							@for (int roundIndex = 0; roundIndex < team.RoundPoints.Count; roundIndex++)
 							{
 								var cell = team.RoundPoints[roundIndex];
-								<td class="text-center p-1">
+								<td class="text-center p-1 round-column" data-round="@cell.Round">
 									<input type="hidden" name="Teams[@teamIndex].RoundPoints[@roundIndex].Round" value="@cell.Round" />
 									<input type="hidden" name="Teams[@teamIndex].RoundPoints[@roundIndex].VolunteerPointsId" value="@cell.VolunteerPointsId" />
 									<input type="number" 
@@ -125,6 +138,18 @@ else
 }
 
 @section Scripts {
+	<style>
+		/* On mobile (small screens), hide all round columns by default */
+		@@media (max-width: 767px) {
+			.round-column {
+				display: none;
+			}
+			/* Show only the selected round column */
+			.round-column.active-round {
+				display: table-cell;
+			}
+		}
+	</style>
 	<script>
 		function reloadPage() {
 			const divisionId = document.getElementById('divisionSelect').value;
@@ -141,6 +166,28 @@ else
 		document.addEventListener('DOMContentLoaded', function() {
 			const table = document.querySelector('table');
 			if (table) {
+				// Mobile round selector functionality
+				const roundSelect = document.getElementById('roundSelect');
+				if (roundSelect) {
+					// Show round 1 by default on mobile
+					showRound(1);
+
+					roundSelect.addEventListener('change', function() {
+						const selectedRound = parseInt(this.value);
+						showRound(selectedRound);
+					});
+				}
+
+				function showRound(roundNumber) {
+					// Hide all round columns
+					const allRoundColumns = document.querySelectorAll('.round-column');
+					allRoundColumns.forEach(col => col.classList.remove('active-round'));
+
+					// Show only the selected round
+					const selectedColumns = document.querySelectorAll(`.round-column[data-round="${roundNumber}"]`);
+					selectedColumns.forEach(col => col.classList.add('active-round'));
+				}
+
 				const inputs = table.querySelectorAll('input[type="number"]');
 				inputs.forEach(input => {
 					input.addEventListener('focus', function() {
