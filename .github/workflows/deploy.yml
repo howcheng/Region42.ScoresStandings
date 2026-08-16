@@ -8,7 +8,7 @@ on:
 
 env:
   PROJECT_ID: ayso-region-42
-  REGION: us-west2
+  REGION: us-central1
   SERVICE: region42-scores-standings
   GAR_LOCATION: us-west2
   GAR_REPOSITORY: region42
