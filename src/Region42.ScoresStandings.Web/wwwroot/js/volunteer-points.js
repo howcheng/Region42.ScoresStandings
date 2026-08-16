@@ -6,14 +6,38 @@
 	'use strict';
 
 	/**
+	 * Reload page with selected season filter (clearing division)
+	 */
+	function reloadPageForSeason() {
+		const seasonId = document.getElementById('seasonSelect').value;
+		let url = '/VolunteerPoints/Entry';
+
+		if (seasonId) {
+			url += `?seasonId=${seasonId}`;
+		}
+
+		window.location.href = url;
+	}
+
+	/**
 	 * Reload page with selected division filter
 	 */
 	function reloadPage() {
+		const seasonSelect = document.getElementById('seasonSelect');
+		const seasonId = seasonSelect ? seasonSelect.value : '';
 		const divisionId = document.getElementById('divisionSelect').value;
 		let url = '/VolunteerPoints/Entry';
 
+		const params = [];
+		if (seasonId) {
+			params.push(`seasonId=${seasonId}`);
+		}
 		if (divisionId) {
-			url += `?divisionId=${divisionId}`;
+			params.push(`divisionId=${divisionId}`);
+		}
+
+		if (params.length > 0) {
+			url += '?' + params.join('&');
 		}
 
 		window.location.href = url;
@@ -139,6 +163,12 @@
 	 * Initialize all event listeners
 	 */
 	function initialize() {
+		// Attach season select change listener
+		const seasonSelect = document.getElementById('seasonSelect');
+		if (seasonSelect) {
+			seasonSelect.addEventListener('change', reloadPageForSeason);
+		}
+
 		// Attach division select change listener
 		const divisionSelect = document.getElementById('divisionSelect');
 		if (divisionSelect) {

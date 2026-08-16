@@ -31,18 +31,25 @@ public class VolunteerPointsController : Controller
 	}
 
 	// GET: VolunteerPoints/Entry
-	public async Task<IActionResult> Entry(int? divisionId)
+	public async Task<IActionResult> Entry(int? divisionId = null, int? seasonId = null)
 	{
 		var seasons = await _seasonRepository.GetAllAsync();
-		var currentSeason = seasons.FirstOrDefault(s => s.IsActive);
+		var selectedSeason = seasonId.HasValue
+			? seasons.FirstOrDefault(s => s.Id == seasonId.Value)
+			: seasons.FirstOrDefault(s => s.IsActive);
 
-		if (currentSeason == null)
+		if (selectedSeason == null && seasons.Any())
+		{
+			selectedSeason = seasons.FirstOrDefault();
+		}
+
+		if (selectedSeason == null)
 		{
 			ViewBag.ErrorMessage = "No active season found.";
 			return View();
 		}
 
-		var divisions = await _divisionRepository.FindAsync(d => d.SeasonId == currentSeason.Id);
+		var divisions = await _divisionRepository.FindAsync(d => d.SeasonId == selectedSeason.Id);
 		var divisionList = divisions.Select(d => new
 		{
 			Id = d.Id,
@@ -50,12 +57,18 @@ public class VolunteerPointsController : Controller
 			TotalRounds = d.TotalRounds
 		}).ToList();
 
+		ViewBag.Seasons = new SelectList(seasons, "Id", "Name", selectedSeason.Id);
 		ViewBag.Divisions = new SelectList(divisionList, "Id", "Name", divisionId);
+
+		if (divisionId.HasValue && !divisionList.Any(d => d.Id == divisionId.Value))
+		{
+			divisionId = null;
+		}
 
 		if (!divisionId.HasValue)
 		{
 			// No division selected, show empty grid
-			return View(new VolunteerPointsGridViewModel());
+			return View(new VolunteerPointsGridViewModel { SeasonId = selectedSeason.Id });
 		}
 
 		var selectedDivision = divisionList.FirstOrDefault(d => d.Id == divisionId.Value);
@@ -75,6 +88,7 @@ public class VolunteerPointsController : Controller
 		// Build grid data: rows = teams, columns = rounds
 		var gridModel = new VolunteerPointsGridViewModel
 		{
+			SeasonId = selectedSeason.Id,
 			DivisionId = divisionId.Value,
 			DivisionName = selectedDivision.Name,
 			TotalRounds = selectedDivision.TotalRounds,
@@ -109,7 +123,7 @@ public class VolunteerPointsController : Controller
 		if (model == null || model.Teams == null || !model.Teams.Any())
 		{
 			TempData["ErrorMessage"] = "No data to save.";
-			return RedirectToAction(nameof(Entry), new { divisionId = model?.DivisionId });
+			return RedirectToAction(nameof(Entry), new { seasonId = model?.SeasonId, divisionId = model?.DivisionId });
 		}
 
 		var successCount = 0;
@@ -158,13 +172,14 @@ public class VolunteerPointsController : Controller
 			}
 		}
 
-		return RedirectToAction(nameof(Entry), new { divisionId = model.DivisionId });
+		return RedirectToAction(nameof(Entry), new { seasonId = model.SeasonId, divisionId = model.DivisionId });
 	}
 }
 
 // View Models for volunteer points grid
 public class VolunteerPointsGridViewModel
 {
+	public int SeasonId { get; set; }
 	public int DivisionId { get; set; }
 	public string DivisionName { get; set; } = string.Empty;
 	public int TotalRounds { get; set; }

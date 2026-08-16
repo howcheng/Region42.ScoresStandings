@@ -40,18 +40,25 @@ public class HomeController : Controller
     }
 
     [AllowAnonymous]
-    public async Task<IActionResult> Standings(int? divisionId, int? throughRound, string? roundSelection)
+    public async Task<IActionResult> Standings(int? divisionId = null, int? throughRound = null, string? roundSelection = null, int? seasonId = null)
     {
         var seasons = await _seasonRepository.GetAllAsync();
-        var currentSeason = seasons.FirstOrDefault(s => s.IsActive);
+        var selectedSeason = seasonId.HasValue
+            ? seasons.FirstOrDefault(s => s.Id == seasonId.Value)
+            : seasons.FirstOrDefault(s => s.IsActive);
 
-        if (currentSeason == null)
+        if (selectedSeason == null && seasons.Any())
+        {
+            selectedSeason = seasons.FirstOrDefault();
+        }
+
+        if (selectedSeason == null)
         {
             ViewBag.ErrorMessage = "No active season found.";
             return View(new StandingsViewModel());
         }
 
-        var divisions = await _divisionRepository.FindAsync(d => d.SeasonId == currentSeason.Id);
+        var divisions = await _divisionRepository.FindAsync(d => d.SeasonId == selectedSeason.Id);
         var divisionList = divisions.Select(d => new
         {
             Id = d.Id,
@@ -61,6 +68,12 @@ public class HomeController : Controller
             CustomMessage = d.CustomMessage
         }).OrderBy(d => d.Name).ToList();
 
+        // If a division is specified but doesn't belong to the selected season, reset it
+        if (divisionId.HasValue && !divisionList.Any(d => d.Id == divisionId.Value))
+        {
+            divisionId = null;
+        }
+
         // Determine division to display (priority: URL parameter > Cookie > First division)
         if (!divisionId.HasValue)
         {
@@ -68,7 +81,7 @@ public class HomeController : Controller
             if (Request.Cookies.TryGetValue(DivisionPreferenceCookieName, out var cookieValue) 
                 && int.TryParse(cookieValue, out int preferredDivisionId))
             {
-                // Verify the division still exists in current season
+                // Verify the division still exists in selected season
                 if (divisionList.Any(d => d.Id == preferredDivisionId))
                 {
                     divisionId = preferredDivisionId;
@@ -89,6 +102,7 @@ public class HomeController : Controller
             SaveDivisionPreference(divisionId.Value);
         }
 
+        ViewBag.Seasons = new SelectList(seasons, "Id", "Name", selectedSeason.Id);
         ViewBag.Divisions = new SelectList(divisionList, "Id", "Name", divisionId);
 
         if (!divisionId.HasValue)
@@ -96,7 +110,8 @@ public class HomeController : Controller
             // No divisions exist
             return View(new StandingsViewModel
             {
-                SeasonName = currentSeason.Name
+                SeasonId = selectedSeason.Id,
+                SeasonName = selectedSeason.Name
             });
         }
 
@@ -163,14 +178,16 @@ public class HomeController : Controller
             ViewBag.ErrorMessage = $"Error calculating standings: {ex.Message}";
             return View(new StandingsViewModel
             {
-                SeasonName = currentSeason.Name,
+                SeasonId = selectedSeason.Id,
+                SeasonName = selectedSeason.Name,
                 DivisionName = selectedDivision.Name
             });
         }
 
         var viewModel = new StandingsViewModel
         {
-            SeasonName = currentSeason.Name,
+            SeasonId = selectedSeason.Id,
+            SeasonName = selectedSeason.Name,
             DivisionId = divisionId.Value,
             DivisionName = standings.DivisionName,
             ThroughRound = standings.ThroughRound,
@@ -179,7 +196,7 @@ public class HomeController : Controller
             Standings = standings.Standings,
             ScrimmageRounds = standings.ScrimmageRounds,
             ScrimmageRoundsInRange = standings.ScrimmageRoundsInRange,
-            SeasonCustomMessage = currentSeason.CustomMessage,
+            SeasonCustomMessage = selectedSeason.CustomMessage,
             DivisionCustomMessage = selectedDivision.CustomMessage
         };
 

@@ -590,6 +590,57 @@ public class HomeControllerTests
 					}
 
 					[Fact]
+					public async Task Standings_WithSeasonAndDivision_ReturnsStandingsForThatSeason()
+					{
+						// Arrange
+						var season1 = _builder.BuildSeason();
+						season1.Id = 10;
+						season1.Name = "Fall 2026";
+
+						var season2 = _builder.BuildSeason();
+						season2.Id = 20;
+						season2.Name = "Spring 2027";
+						season2.IsActive = true;
+
+						var division = _builder.BuildDivision(season1.Id);
+						division.Id = 100;
+
+						var standingsResult = new StandingsResult
+						{
+							DivisionId = division.Id,
+							DivisionName = "10U Boys",
+							ThroughRound = 1,
+							Standings = new List<TeamStanding>()
+						};
+
+						_mockSeasonRepo.Setup(r => r.GetAllAsync())
+							.ReturnsAsync(new List<Season> { season1, season2 });
+						_mockDivisionRepo.Setup(r => r.FindAsync(It.IsAny<Expression<Func<Division, bool>>>()))
+							.ReturnsAsync(new List<Division> { division });
+
+						var games = new List<Game>();
+						_mockGameService.Setup(s => s.GetGamesByDivisionAsync(division.Id))
+							.ReturnsAsync(games);
+						_mockGameService.Setup(s => s.GetGamesByDivisionAndRoundAsync(division.Id, 1))
+							.ReturnsAsync(games);
+
+						_mockStandingsService.Setup(s => s.GetStandingsByRoundAsync(division.Id, 1))
+							.ReturnsAsync(standingsResult);
+
+						// Act
+						var result = await _controller.Standings(division.Id, null, null, season1.Id);
+
+						// Assert
+						result.Should().BeOfType<ViewResult>();
+						var viewResult = result as ViewResult;
+						var model = viewResult!.Model as StandingsViewModel;
+						model.Should().NotBeNull();
+						model!.SeasonId.Should().Be(season1.Id);
+						model.SeasonName.Should().Be(season1.Name);
+						model.DivisionId.Should().Be(division.Id);
+					}
+
+					[Fact]
 					public async Task Index_RedirectsToStandings()
 					{
 						// Act

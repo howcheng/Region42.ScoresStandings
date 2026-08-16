@@ -6,18 +6,40 @@
 	'use strict';
 
 	/**
+	 * Filter standings by selected season
+	 */
+	function filterBySeason() {
+		const seasonId = document.getElementById('seasonSelect').value;
+		if (seasonId) {
+			window.location.href = `/Home/Standings?seasonId=${seasonId}`;
+		} else {
+			window.location.href = '/Home/Standings';
+		}
+	}
+
+	/**
 	 * Filter standings by selected division
 	 */
 	function filterByDivision() {
+		const seasonSelect = document.getElementById('seasonSelect');
+		const seasonId = seasonSelect ? seasonSelect.value : '';
 		const divisionId = document.getElementById('divisionSelect').value;
 		const roundSelect = document.getElementById('roundSelect');
 
 		if (divisionId) {
 			roundSelect.disabled = false;
-			window.location.href = `/Home/Standings?divisionId=${divisionId}`;
+			let url = `/Home/Standings?divisionId=${divisionId}`;
+			if (seasonId) {
+				url += `&seasonId=${seasonId}`;
+			}
+			window.location.href = url;
 		} else {
 			roundSelect.disabled = true;
-			window.location.href = '/Home/Standings';
+			let url = '/Home/Standings';
+			if (seasonId) {
+				url += `?seasonId=${seasonId}`;
+			}
+			window.location.href = url;
 		}
 	}
 
@@ -25,11 +47,16 @@
 	 * Filter standings by selected round
 	 */
 	function filterByRound() {
+		const seasonSelect = document.getElementById('seasonSelect');
+		const seasonId = seasonSelect ? seasonSelect.value : '';
 		const divisionId = document.getElementById('divisionSelect').value;
 		const throughRound = document.getElementById('roundSelect').value;
 
 		if (divisionId) {
 			let url = `/Home/Standings?divisionId=${divisionId}`;
+			if (seasonId) {
+				url += `&seasonId=${seasonId}`;
+			}
 			if (throughRound) {
 				url += `&throughRound=${throughRound}`;
 			}
@@ -60,8 +87,13 @@
 	 */
 	function initialize() {
 		// Attach event listeners to select elements
+		const seasonSelect = document.getElementById('seasonSelect');
 		const divisionSelect = document.getElementById('divisionSelect');
 		const roundSelect = document.getElementById('roundSelect');
+
+		if (seasonSelect) {
+			seasonSelect.addEventListener('change', filterBySeason);
+		}
 
 		if (divisionSelect) {
 			divisionSelect.addEventListener('change', filterByDivision);

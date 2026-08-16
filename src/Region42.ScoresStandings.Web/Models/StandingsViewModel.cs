@@ -7,6 +7,7 @@ namespace Region42.ScoresStandings.Web.Models;
 /// </summary>
 public class StandingsViewModel
 {
+	public int SeasonId { get; set; }
 	public string SeasonName { get; set; } = string.Empty;
 	public int DivisionId { get; set; }
 	public string DivisionName { get; set; } = string.Empty;

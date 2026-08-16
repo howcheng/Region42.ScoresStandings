@@ -2,6 +2,7 @@
 
 @{
 	ViewData["Title"] = "Volunteer Points Entry";
+	var seasons = ViewBag.Seasons as SelectList;
 	var divisions = ViewBag.Divisions as SelectList;
 }
 
@@ -20,7 +21,19 @@
 }
 
 <div class="row mb-4">
-	<div class="col-md-6">
+	<div class="col-md-6 mb-2">
+		<label for="seasonSelect" class="form-label">Season</label>
+		<select id="seasonSelect" class="form-select">
+			@if (seasons != null)
+			{
+				foreach (var season in seasons)
+				{
+					<option value="@season.Value" selected="@(season.Selected)">@season.Text</option>
+				}
+			}
+		</select>
+	</div>
+	<div class="col-md-6 mb-2">
 		<label for="divisionSelect" class="form-label">Division</label>
 		<select id="divisionSelect" class="form-select">
 			<option value="">-- Select Division --</option>
@@ -38,6 +51,7 @@
 @if (Model != null && Model.Teams != null && Model.Teams.Any())
 {
 	<form asp-action="Entry" method="post">
+		<input type="hidden" asp-for="SeasonId" />
 		<input type="hidden" asp-for="DivisionId" />
 		<input type="hidden" asp-for="DivisionName" />
 		<input type="hidden" asp-for="TotalRounds" />
@@ -111,7 +125,7 @@
 			<button type="submit" class="btn btn-primary">
 				<i class="bi bi-save"></i> Save All Points
 			</button>
-			<a asp-action="Entry" asp-route-divisionId="@Model.DivisionId" class="btn btn-secondary">
+			<a asp-action="Entry" asp-route-seasonId="@Model.SeasonId" asp-route-divisionId="@Model.DivisionId" class="btn btn-secondary">
 				<i class="bi bi-arrow-clockwise"></i> Reset
 			</a>
 		</div>

@@ -52,7 +52,19 @@
 }
 
 <div class="row mb-3">
-	<div class="col-md-6 mb-2">
+	<div class="col-md-4 mb-2">
+		<label for="seasonSelect" class="form-label">Season</label>
+		<select id="seasonSelect" class="form-select">
+			@if (ViewBag.Seasons != null)
+			{
+				foreach (var item in (IEnumerable<SelectListItem>)ViewBag.Seasons)
+				{
+					<option value="@item.Value" selected="@item.Selected">@item.Text</option>
+				}
+			}
+		</select>
+	</div>
+	<div class="col-md-4 mb-2">
 		<label for="divisionSelect" class="form-label">Division</label>
 		<select id="divisionSelect" class="form-select">
 			@if (ViewBag.Divisions != null)
@@ -65,7 +77,7 @@
 			}
 		</select>
 	</div>
-	<div class="col-md-6 mb-2">
+	<div class="col-md-4 mb-2">
 		<label for="roundSelect" class="form-label">Display Through</label>
 		<select id="roundSelect" class="form-select" @(Model.DivisionId == 0 ? "disabled" : "")>
 			@if (ViewBag.Rounds != null)
