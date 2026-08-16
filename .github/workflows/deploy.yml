@@ -133,5 +133,5 @@ jobs:
             --memory=512Mi
             --cpu=1
             --service-account=region42-web-app@ayso-region-42.iam.gserviceaccount.com
-            --add-cloudsql-instances=${{ env.PROJECT_ID }}:${{ env.REGION }}:region-42-scores-standings
+            --add-cloudsql-instances=${{ env.PROJECT_ID }}:us-west2:region-42-scores-standings
             --set-secrets="ConnectionStrings__DefaultConnection=region42-db-connection-string:latest,Authentication__Google__ClientId=region42-google-oauth-client-id:latest,Authentication__Google__ClientSecret=region42-google-oauth-client-secret:latest"
