@@ -50,7 +50,13 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
 
 if (connectionString.Contains("IamAuth=true", StringComparison.OrdinalIgnoreCase))
 {
-	var dataSourceBuilder = new NpgsqlDataSourceBuilder(connectionString);
+	// Strip "IamAuth=true" (and its separating semicolon) so Npgsql doesn't throw a parsing exception
+	var cleanConnectionString = connectionString
+		.Replace(";IamAuth=true", "", StringComparison.OrdinalIgnoreCase)
+		.Replace("IamAuth=true;", "", StringComparison.OrdinalIgnoreCase)
+		.Replace("IamAuth=true", "", StringComparison.OrdinalIgnoreCase);
+
+	var dataSourceBuilder = new NpgsqlDataSourceBuilder(cleanConnectionString);
 
 	// Register periodic password provider to fetch GCP IAM OAuth2 access tokens
 	dataSourceBuilder.UsePeriodicPasswordProvider(async (connectionSettings, cancellationToken) =>
