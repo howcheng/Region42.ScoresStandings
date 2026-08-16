@@ -56,6 +56,9 @@ jobs:
     name: Package and Deploy to Google Cloud Run
     needs: build-and-test
     runs-on: ubuntu-latest
+    env:
+      HAS_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+      HAS_WIF: ${{ secrets.GCP_WIF_PROVIDER }}
 
     # Add permissions for Workload Identity Federation (recommended)
     permissions:
@@ -71,7 +74,7 @@ jobs:
       # To use, add your service account key JSON as a repository secret named GCP_SA_KEY.
       # You can generate a key from GCP Console IAM -> Service Accounts -> region42-github-actions -> Keys -> Add Key.
       - name: Google Auth (Service Account Key)
-        if: "${{ secrets.GCP_SA_KEY != '' }}"
+        if: "${{ env.HAS_SA_KEY != '' }}"
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
@@ -79,7 +82,7 @@ jobs:
       # Option B: Authenticate using Workload Identity Federation (WIF) (Recommended & more secure)
       # To use, create a Workload Identity Pool and Provider in GCP and set these secrets.
       - name: Google Auth (Workload Identity Federation)
-        if: "${{ secrets.GCP_SA_KEY == '' && secrets.GCP_WIF_PROVIDER != '' }}"
+        if: "${{ env.HAS_SA_KEY == '' && env.HAS_WIF != '' }}"
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
@@ -88,7 +91,7 @@ jobs:
       # Fallback: Error if no credentials provided
       - name: Check Authentication Configuration
         run: |
-          if [ "${{ secrets.GCP_SA_KEY }}" == "" ] && [ "${{ secrets.GCP_WIF_PROVIDER }}" == "" ]; then
+          if [ "${HAS_SA_KEY}" == "" ] && [ "${HAS_WIF}" == "" ]; then
             echo "::error::No authentication method configured. Please set the GCP_SA_KEY or GCP_WIF_PROVIDER and GCP_WIF_SERVICE_ACCOUNT GitHub Secrets."
             exit 1
           fi
