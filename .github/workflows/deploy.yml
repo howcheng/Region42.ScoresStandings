@@ -1,0 +1,134 @@
+name: Build and Deploy to Google Cloud Run
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+env:
+  PROJECT_ID: ayso-region-42
+  REGION: us-west2
+  SERVICE: region42-scores-standings
+  GAR_LOCATION: us-west2
+  GAR_REPOSITORY: region42
+  IMAGE_NAME: region42-scores-standings
+
+jobs:
+  build-and-test:
+    name: Build and Unit Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10.0 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Cache NuGet Packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/*.slnx') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Restore Dependencies
+        run: dotnet restore
+
+      - name: Build Application
+        run: dotnet build -c Release --no-restore
+
+      - name: Run Unit Tests
+        run: dotnet test -c Release --no-build --logger "trx;LogFileName=test-results.trx"
+
+      - name: Upload Test Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: '**/TestResults/*.trx'
+
+  deploy:
+    name: Package and Deploy to Google Cloud Run
+    needs: build-and-test
+    runs-on: ubuntu-latest
+
+    # Add permissions for Workload Identity Federation (recommended)
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # --- GOOGLE CLOUD AUTHENTICATION ---
+      # Option A: Authenticate using Service Account Key JSON (Traditional)
+      # To use, add your service account key JSON as a repository secret named GCP_SA_KEY.
+      # You can generate a key from GCP Console IAM -> Service Accounts -> region42-github-actions -> Keys -> Add Key.
+      - name: Google Auth (Service Account Key)
+        if: "${{ secrets.GCP_SA_KEY != '' }}"
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      # Option B: Authenticate using Workload Identity Federation (WIF) (Recommended & more secure)
+      # To use, create a Workload Identity Pool and Provider in GCP and set these secrets.
+      - name: Google Auth (Workload Identity Federation)
+        if: "${{ secrets.GCP_SA_KEY == '' && secrets.GCP_WIF_PROVIDER != '' }}"
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_WIF_SERVICE_ACCOUNT }}
+
+      # Fallback: Error if no credentials provided
+      - name: Check Authentication Configuration
+        run: |
+          if [ "${{ secrets.GCP_SA_KEY }}" == "" ] && [ "${{ secrets.GCP_WIF_PROVIDER }}" == "" ]; then
+            echo "::error::No authentication method configured. Please set the GCP_SA_KEY or GCP_WIF_PROVIDER and GCP_WIF_SERVICE_ACCOUNT GitHub Secrets."
+            exit 1
+          fi
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      # --- CONFIGURE DOCKER & ARTIFACT REGISTRY ---
+      - name: Authorize Docker to Artifact Registry
+        run: |
+          gcloud auth configure-docker ${{ env.GAR_LOCATION }}-docker.pkg.dev --quiet
+
+      # --- BUILD AND PUSH IMAGE ---
+      - name: Build and Push Container Image
+        run: |
+          IMAGE_TAG="${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
+          LATEST_TAG="${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/${{ env.IMAGE_NAME }}:latest"
+
+          echo "Building image tag: $IMAGE_TAG"
+          docker build -t "$IMAGE_TAG" -t "$LATEST_TAG" .
+
+          echo "Pushing image tags..."
+          docker push "$IMAGE_TAG"
+          docker push "$LATEST_TAG"
+
+      # --- DEPLOY TO GOOGLE CLOUD RUN ---
+      # Automatically mounts Secret Manager secrets to environment variables matching .NET configuration naming conventions.
+      # Sets up standard memory/CPU limits and links the PostgreSQL Cloud SQL proxy.
+      - name: Deploy to Google Cloud Run
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: ${{ env.SERVICE }}
+          region: ${{ env.REGION }}
+          image: ${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          flags: |
+            --allow-unauthenticated
+            --min-instances=0
+            --max-instances=5
+            --memory=512Mi
+            --cpu=1
+            --service-account=region42-web-app@ayso-region-42.iam.gserviceaccount.com
+            --add-cloudsql-instances=${{ env.PROJECT_ID }}:${{ env.REGION }}:region-42-scores-standings
+            --set-secrets="ConnectionStrings__DefaultConnection=region42-db-connection-string:latest,Authentication__Google__ClientId=region42-google-oauth-client-id:latest,Authentication__Google__ClientSecret=region42-google-oauth-client-secret:latest"

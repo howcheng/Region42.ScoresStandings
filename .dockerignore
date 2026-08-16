@@ -1,0 +1,28 @@
+# Exclude build and binary directories
+**/bin/
+**/obj/
+**/out/
+
+# Exclude IDE/Git directories
+.vs/
+.vscode/
+.git/
+.github/
+.idea/
+*.user
+*.suo
+*.sln.docstate
+
+# Exclude logs and temp files
+*.log
+*.tmp
+temp/
+
+# Exclude local environment/app settings overrides
+**/appsettings.Development.json
+**/appsettings.Local.json
+**/appsettings*.user.json
+
+# Docker and deployment files
+Dockerfile
+.dockerignore
