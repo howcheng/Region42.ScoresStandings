@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Region42.ScoresStandings.Application.Interfaces;
 using Region42.ScoresStandings.Application.Services;
 using Region42.ScoresStandings.Domain.Interfaces;
@@ -35,12 +36,46 @@ builder.Services.AddSingleton<Microsoft.AspNetCore.Mvc.ViewFeatures.ITempDataPro
 // Register IHttpContextAccessor for audit tracking
 builder.Services.AddHttpContextAccessor();
 
+// Configure HSTS to use OWASP recommended values (1 year, subdomains, and preload)
+builder.Services.AddHsts(options =>
+{
+	options.Preload = true;
+	options.IncludeSubDomains = true;
+	options.MaxAge = TimeSpan.FromDays(365); // 1 year (OWASP recommendation)
+});
+
 // Register DbContext with connection string from configuration/user secrets
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
 	?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
 
-builder.Services.AddDbContext<Region42DbContext>(options =>
-	options.UseNpgsql(connectionString));
+if (connectionString.Contains("IamAuth=true", StringComparison.OrdinalIgnoreCase))
+{
+	var dataSourceBuilder = new NpgsqlDataSourceBuilder(connectionString);
+
+	// Register periodic password provider to fetch GCP IAM OAuth2 access tokens
+	dataSourceBuilder.UsePeriodicPasswordProvider(async (connectionSettings, cancellationToken) =>
+	{
+		using var client = new HttpClient();
+		client.DefaultRequestHeaders.Add("Metadata-Flavor", "Google");
+
+		// Query Google Metadata Server for local service account OAuth2 identity token
+		var response = await client.GetAsync("http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token", cancellationToken);
+		response.EnsureSuccessStatusCode();
+
+		var tokenInfo = await response.Content.ReadFromJsonAsync<MetadataTokenResponse>(cancellationToken);
+		return tokenInfo?.access_token ?? throw new InvalidOperationException("Failed to retrieve IAM token from GCP metadata server.");
+	}, TimeSpan.FromMinutes(45), TimeSpan.FromSeconds(10));
+
+	var dataSource = dataSourceBuilder.Build();
+
+	builder.Services.AddDbContext<Region42DbContext>(options =>
+		options.UseNpgsql(dataSource));
+}
+else
+{
+	builder.Services.AddDbContext<Region42DbContext>(options =>
+		options.UseNpgsql(connectionString));
+}
 
 // Register IRegion42DbContext interface for dependency injection
 builder.Services.AddScoped<IRegion42DbContext>(provider =>
@@ -139,8 +174,8 @@ if (!app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-// Add Content Security Policy headers
-app.UseContentSecurityPolicy();
+// Add OWASP recommended security headers and Content Security Policy headers
+app.UseSecurityHeaders();
 
 app.UseRouting();
 
@@ -159,3 +194,10 @@ app.MapControllerRoute(
 
 
 app.Run();
+
+public class MetadataTokenResponse
+{
+	public string access_token { get; set; } = "";
+	public int expires_in { get; set; }
+	public string token_type { get; set; } = "";
+}
