@@ -15,6 +15,31 @@ public class StandingsViewModel
 	public DateTime CalculatedAt { get; set; }
 	public List<TeamStanding> Standings { get; set; } = new();
 	public List<GameScoreDisplay> Scores { get; set; } = new();
+
+	/// <summary>
+	/// Number of leading rounds configured as scrimmages for this division.
+	/// </summary>
+	public int ScrimmageRounds { get; set; }
+
+	/// <summary>
+	/// Number of scrimmage rounds included within the currently displayed range.
+	/// </summary>
+	public int ScrimmageRoundsInRange { get; set; }
+
+	/// <summary>
+	/// True if the currently displayed standings range includes at least one scrimmage round.
+	/// </summary>
+	public bool IncludesScrimmageRounds => ScrimmageRoundsInRange > 0;
+
+	/// <summary>
+	/// Custom note or announcement message for the currently active season.
+	/// </summary>
+	public string? SeasonCustomMessage { get; set; }
+
+	/// <summary>
+	/// Custom note or announcement message for the currently selected division.
+	/// </summary>
+	public string? DivisionCustomMessage { get; set; }
 }
 
 /// <summary>

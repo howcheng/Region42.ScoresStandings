@@ -38,6 +38,21 @@ public class StandingsResult
 	public int ThroughRound { get; set; }
 	public DateTime CalculatedAt { get; set; }
 	public List<TeamStanding> Standings { get; set; } = new();
+
+	/// <summary>
+	/// Number of leading rounds configured as scrimmages for this division (do not count toward standings).
+	/// </summary>
+	public int ScrimmageRounds { get; set; }
+
+	/// <summary>
+	/// True if the range of rounds being displayed includes at least one scrimmage round.
+	/// </summary>
+	public bool IncludesScrimmageRounds => ScrimmageRoundsInRange > 0;
+
+	/// <summary>
+	/// Number of scrimmage rounds included within the currently displayed range.
+	/// </summary>
+	public int ScrimmageRoundsInRange { get; set; }
 }
 
 /// <summary>

@@ -20,6 +20,37 @@
 	</div>
 }
 
+@if (!string.IsNullOrWhiteSpace(Model.SeasonCustomMessage))
+{
+	<div class="alert alert-warning border-warning" role="alert">
+		<i class="bi bi-exclamation-triangle-fill me-2"></i>
+		<strong>Season Announcement:</strong> @Model.SeasonCustomMessage
+	</div>
+}
+
+@if (!string.IsNullOrWhiteSpace(Model.DivisionCustomMessage))
+{
+	<div class="alert alert-info border-info" role="alert">
+		<i class="bi bi-info-circle-fill me-2"></i>
+		<strong>Division Bulletin:</strong> @Model.DivisionCustomMessage
+	</div>
+}
+
+@if (Model.IncludesScrimmageRounds)
+{
+	<div class="alert alert-info" role="alert">
+		<i class="bi bi-info-circle-fill"></i>
+		@if (Model.ScrimmageRoundsInRange == 1)
+		{
+			<span>Round 1 is a scrimmage and does not count toward standings. Only volunteer points from that round are included below.</span>
+		}
+		else
+		{
+			<span>Rounds 1&ndash;@Model.ScrimmageRoundsInRange are scrimmages and do not count toward standings. Only volunteer points from those rounds are included below.</span>
+		}
+	</div>
+}
+
 <div class="row mb-3">
 	<div class="col-md-6 mb-2">
 		<label for="divisionSelect" class="form-label">Division</label>

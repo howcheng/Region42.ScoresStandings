@@ -5,6 +5,7 @@ public class Season : BaseEntity
 	public string Name { get; set; } = string.Empty;
 	public int Year { get; set; }
 	public bool IsActive { get; set; }
+	public string? CustomMessage { get; set; }
 
 	public ICollection<Division> Divisions { get; set; } = new List<Division>();
 

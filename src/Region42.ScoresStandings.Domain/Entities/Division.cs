@@ -15,6 +15,18 @@ public class Division : BaseEntity
 	/// </summary>
 	public int PlayoffSpots { get; set; } = 1;
 
+	/// <summary>
+	/// Number of leading rounds (starting at Round 1) that are scrimmages and do not count
+	/// toward standings. Scores are still entered for these rounds, but only volunteer points
+	/// earned during them contribute to standings.
+	/// </summary>
+	public int ScrimmageRounds { get; set; } = 0;
+
+	/// <summary>
+	/// Custom announcements or notice text for this specific division (per-season, since Divisions are scoped to a Season).
+	/// </summary>
+	public string? CustomMessage { get; set; }
+
 	public Season Season { get; set; } = null!;
 	public ICollection<Team> Teams { get; set; } = new List<Team>();
 	public ICollection<Game> Games { get; set; } = new List<Game>();

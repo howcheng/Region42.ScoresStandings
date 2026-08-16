@@ -56,7 +56,9 @@ public class HomeController : Controller
         {
             Id = d.Id,
             Name = $"{d.AgeGroup} {d.Gender}",
-            TotalRounds = d.TotalRounds
+            TotalRounds = d.TotalRounds,
+            ScrimmageRounds = d.ScrimmageRounds,
+            CustomMessage = d.CustomMessage
         }).OrderBy(d => d.Name).ToList();
 
         // Determine division to display (priority: URL parameter > Cookie > First division)
@@ -174,7 +176,11 @@ public class HomeController : Controller
             ThroughRound = standings.ThroughRound,
             TotalRounds = selectedDivision.TotalRounds,
             CalculatedAt = standings.CalculatedAt,
-            Standings = standings.Standings
+            Standings = standings.Standings,
+            ScrimmageRounds = standings.ScrimmageRounds,
+            ScrimmageRoundsInRange = standings.ScrimmageRoundsInRange,
+            SeasonCustomMessage = currentSeason.CustomMessage,
+            DivisionCustomMessage = selectedDivision.CustomMessage
         };
 
         // Fetch scores for display - for the specific display round

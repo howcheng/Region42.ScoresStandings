@@ -1,0 +1,71 @@
+@model Region42.ScoresStandings.Domain.Entities.Division
+
+@{
+	ViewData["Title"] = "Edit Division";
+}
+
+<h2>Edit Division: @Model.AgeGroup @Model.Gender</h2>
+<hr />
+
+<div class="row">
+	<div class="col-md-8">
+		<form asp-action="Edit" method="post">
+			<input type="hidden" asp-for="Id" />
+			<input type="hidden" asp-for="SeasonId" />
+			<input type="hidden" asp-for="AgeGroup" />
+			<input type="hidden" asp-for="Gender" />
+			<div asp-validation-summary="ModelOnly" class="text-danger"></div>
+
+			<div class="mb-3">
+				<label asp-for="TotalRounds" class="form-label">Total Rounds</label>
+				<input asp-for="TotalRounds" type="number" min="1" class="form-control" />
+				<span asp-validation-for="TotalRounds" class="text-danger"></span>
+				<small class="form-text text-muted">
+					Total number of regular season rounds scheduled for this division.
+				</small>
+			</div>
+
+			<div class="mb-3">
+				<label asp-for="ScrimmageRounds" class="form-label">Scrimmage Rounds</label>
+				<input asp-for="ScrimmageRounds" type="number" min="0" class="form-control" />
+				<span asp-validation-for="ScrimmageRounds" class="text-danger"></span>
+				<small class="form-text text-muted">
+					Number of leading rounds (starting at Round 1) that are scrimmages. Scores are still
+					entered for these rounds, but only volunteer points earned during them count toward
+					standings. Set to 0 if all rounds count.
+				</small>
+			</div>
+
+			<div class="mb-3">
+				<label asp-for="PlayoffSpots" class="form-label">Playoff Spots</label>
+				<input asp-for="PlayoffSpots" type="number" min="1" class="form-control" />
+				<span asp-validation-for="PlayoffSpots" class="text-danger"></span>
+				<small class="form-text text-muted">
+					Number of teams from this division that qualify for playoffs.
+				</small>
+			</div>
+
+			<div class="mb-3">
+				<label asp-for="CustomMessage" class="form-label">Custom Message (Bulletin)</label>
+				<textarea asp-for="CustomMessage" class="form-control" rows="3" placeholder="e.g. 10UB was granted an extra playoff spot due to tiebreakers."></textarea>
+				<span asp-validation-for="CustomMessage" class="text-danger"></span>
+				<small class="form-text text-muted">
+					Optional announcement displayed to everyone viewing this division's standings.
+				</small>
+			</div>
+
+			<div class="mb-3">
+				<button type="submit" class="btn btn-primary">
+					<i class="bi bi-check-circle"></i> Save Changes
+				</button>
+				<a asp-action="Index" class="btn btn-secondary">
+					<i class="bi bi-x-circle"></i> Cancel
+				</a>
+			</div>
+		</form>
+	</div>
+</div>
+
+@section Scripts {
+	@{await Html.RenderPartialAsync("_ValidationScriptsPartial");}
+}

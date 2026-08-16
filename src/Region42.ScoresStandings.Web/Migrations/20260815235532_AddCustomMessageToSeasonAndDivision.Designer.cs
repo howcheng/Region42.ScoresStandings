@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Region42.ScoresStandings.Web.Data;
@@ -11,9 +12,11 @@ using Region42.ScoresStandings.Web.Data;
 namespace Region42.ScoresStandings.Web.Migrations
 {
     [DbContext(typeof(Region42DbContext))]
-    partial class Region42DbContextModelSnapshot : ModelSnapshot
+    [Migration("20260815235532_AddCustomMessageToSeasonAndDivision")]
+    partial class AddCustomMessageToSeasonAndDivision
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

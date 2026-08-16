@@ -157,7 +157,7 @@ public class StandingsService : IStandingsService
 		var minVolunteerPoints = settings?.MinVolunteerPointsForPlayoff ?? 0;
 
 		// Calculate standings for each team
-		var standings = teams.Select(team => CalculateTeamStanding(team, games, scores, volunteerPoints)).ToList();
+		var standings = teams.Select(team => CalculateTeamStanding(team, games, scores, volunteerPoints, division.ScrimmageRounds)).ToList();
 
 		// Sort by total points (desc), goal differential (desc), goals for (desc)
 		standings = standings
@@ -198,7 +198,11 @@ public class StandingsService : IStandingsService
 			DivisionName = GetDivisionName(division),
 			ThroughRound = throughRound,
 			CalculatedAt = DateTime.UtcNow,
-			Standings = standings
+			Standings = standings,
+			ScrimmageRounds = division.ScrimmageRounds,
+			ScrimmageRoundsInRange = throughRound == 0
+				? Math.Min(division.ScrimmageRounds, division.TotalRounds)
+				: Math.Min(division.ScrimmageRounds, throughRound)
 		};
 	}
 
@@ -206,7 +210,8 @@ public class StandingsService : IStandingsService
 		Team team,
 		List<Game> games,
 		List<Score> scores,
-		List<VolunteerPoints> volunteerPoints)
+		List<VolunteerPoints> volunteerPoints,
+		int scrimmageRounds)
 	{
 		var standing = new TeamStanding
 		{
@@ -215,8 +220,8 @@ public class StandingsService : IStandingsService
 			TeamShortName = team.ShortName
 		};
 
-		// Get games where this team played
-		var teamGames = games.Where(g => g.HomeTeamId == team.Id || g.AwayTeamId == team.Id).ToList();
+		// Get games where this team played, excluding scrimmage rounds (those don't count toward standings)
+		var teamGames = games.Where(g => (g.HomeTeamId == team.Id || g.AwayTeamId == team.Id) && g.Round > scrimmageRounds).ToList();
 		standing.GamesPlayed = teamGames.Count;
 
 		// Calculate stats from each game

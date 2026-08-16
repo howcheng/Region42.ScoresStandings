@@ -85,6 +85,7 @@ public class Region42DbContext : DbContext, IRegion42DbContext
 			entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
 			entity.Property(e => e.Year).IsRequired();
 			entity.Property(e => e.IsActive).IsRequired();
+			entity.Property(e => e.CustomMessage).HasMaxLength(500);
 			entity.Property(e => e.RowVersion).IsConcurrencyToken();
 			entity.HasIndex(e => e.Year);
 			// StartDate is a computed property (August 1 of Year) - not mapped to database
@@ -99,6 +100,8 @@ public class Region42DbContext : DbContext, IRegion42DbContext
 			entity.Property(e => e.Gender).IsRequired();
 			entity.Property(e => e.TotalRounds).IsRequired();
 			entity.Property(e => e.PlayoffSpots).IsRequired().HasDefaultValue(1);
+			entity.Property(e => e.ScrimmageRounds).IsRequired().HasDefaultValue(0);
+			entity.Property(e => e.CustomMessage).HasMaxLength(500);
 			entity.Property(e => e.RowVersion).IsConcurrencyToken();
 
 			entity.HasOne(e => e.Season)

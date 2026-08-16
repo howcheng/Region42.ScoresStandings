@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Region42.ScoresStandings.Web.Data;
@@ -11,9 +12,11 @@ using Region42.ScoresStandings.Web.Data;
 namespace Region42.ScoresStandings.Web.Migrations
 {
     [DbContext(typeof(Region42DbContext))]
-    partial class Region42DbContextModelSnapshot : ModelSnapshot
+    [Migration("20260815231741_AddScrimmageRoundsToDivision")]
+    partial class AddScrimmageRoundsToDivision
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -40,10 +43,6 @@ namespace Region42.ScoresStandings.Web.Migrations
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
-
-                    b.Property<string>("CustomMessage")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
 
                     b.Property<int>("Gender")
                         .HasColumnType("integer");
@@ -208,10 +207,6 @@ namespace Region42.ScoresStandings.Web.Migrations
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
-
-                    b.Property<string>("CustomMessage")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");

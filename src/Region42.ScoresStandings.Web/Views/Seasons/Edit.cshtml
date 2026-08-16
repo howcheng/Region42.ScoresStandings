@@ -1,0 +1,47 @@
+@model Region42.ScoresStandings.Domain.Entities.Season
+
+@{
+	ViewData["Title"] = "Edit Season";
+}
+
+<h2>Edit Season: @Model.Name</h2>
+<hr />
+
+<div class="row">
+	<div class="col-md-8">
+		<form asp-action="Edit" method="post">
+			<input type="hidden" asp-for="Id" />
+			<input type="hidden" asp-for="Year" />
+			<input type="hidden" asp-for="IsActive" />
+			<div asp-validation-summary="ModelOnly" class="text-danger"></div>
+
+			<div class="mb-3">
+				<label asp-for="Name" class="form-label">Season Name</label>
+				<input asp-for="Name" class="form-control" />
+				<span asp-validation-for="Name" class="text-danger"></span>
+			</div>
+
+			<div class="mb-3">
+				<label asp-for="CustomMessage" class="form-label">Custom Announcement Link / Message</label>
+				<textarea asp-for="CustomMessage" class="form-control" rows="3" placeholder="e.g., Round 3 games were cancelled due to rain. We are currently working on rescheduling."></textarea>
+				<span asp-validation-for="CustomMessage" class="text-danger"></span>
+				<small class="form-text text-muted">
+					Optional announcement displayed at the top of the standings page for everyone viewing this season.
+				</small>
+			</div>
+
+			<div class="mb-3">
+				<button type="submit" class="btn btn-primary">
+					<i class="bi bi-check-circle"></i> Save Changes
+				</button>
+				<a asp-action="Index" class="btn btn-secondary">
+					<i class="bi bi-x-circle"></i> Cancel
+				</a>
+			</div>
+		</form>
+	</div>
+</div>
+
+@section Scripts {
+	@{await Html.RenderPartialAsync("_ValidationScriptsPartial");}
+}
