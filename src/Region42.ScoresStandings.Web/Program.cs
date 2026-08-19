@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.HttpOverrides;
 using Npgsql;
 using Region42.ScoresStandings.Application.Interfaces;
 using Region42.ScoresStandings.Application.Services;
@@ -12,6 +13,14 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 var mvcBuilder = builder.Services.AddControllersWithViews();
+
+// Configure forwarded headers to handle HTTPS redirection on Google Cloud Run hosting
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+	options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+	options.KnownNetworks.Clear();
+	options.KnownProxies.Clear();
+});
 
 // Enable runtime compilation in Development environment for faster development
 if (builder.Environment.IsDevelopment())
@@ -134,6 +143,9 @@ builder.Services.AddAuthorizationBuilder()
 builder.Services.AddSingleton<IAuthorizationHandler, DomainRequirementHandler>();
 
 var app = builder.Build();
+
+// Enable Forwarded Headers first in the request pipeline to recognize secure requests terminated at Cloud Run
+app.UseForwardedHeaders();
 
 // Apply pending migrations automatically in Development environment only
 // Production migrations should be applied via deployment pipeline
