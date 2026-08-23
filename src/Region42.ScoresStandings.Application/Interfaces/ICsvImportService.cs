@@ -62,6 +62,7 @@ public class CsvPreviewResult
 {
 	public List<CsvTeamPreview> Teams { get; set; } = new();
 	public List<CsvGamePreview> Games { get; set; } = new();
+	public List<CsvWeekDivisionSummary> WeeklySummary { get; set; } = new();
 	public CsvValidationResult Validation { get; set; } = new();
 }
 
@@ -88,4 +89,15 @@ public class CsvGamePreview
 	public string Location { get; set; } = string.Empty;
 	public int Round { get; set; }
 	public string EventName { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Summary of the number of games per week per division.
+/// </summary>
+public class CsvWeekDivisionSummary
+{
+	public AgeGroup AgeGroup { get; set; }
+	public Gender Gender { get; set; }
+	public DateTime WeekStartDate { get; set; }
+	public int GameCount { get; set; }
 }

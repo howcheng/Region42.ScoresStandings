@@ -293,9 +293,34 @@ public class CsvImportService : ICsvImportService
 				}
 			}
 
-			// Add game previews with transformed names (limit to first 50 for performance)
+			// Add game previews with transformed names (limit to 50 total for performance, keeping it representative across divisions)
 			var gamePreviews = new List<CsvGamePreview>();
-			foreach (var row in validRows.Take(50))
+
+			// We group the valid rows by division so we can calculate proper rounds and represent different divisions
+			var rowsByDivision = validRows.GroupBy(r => (r.ParsedAgeGroup!.Value, r.ParsedGender!.Value)).ToDictionary(g => g.Key, g => g.ToList());
+
+			// To limit to 50 games but showcase all divisions chromatically, we will take an equal portion from each division
+			var selectedRows = new List<CsvGameRowDto>();
+			if (rowsByDivision.Any())
+			{
+				int maxPerDivision = Math.Max(1, 50 / rowsByDivision.Count);
+				foreach (var divisionGroup in rowsByDivision.Values)
+				{
+					selectedRows.AddRange(divisionGroup.Take(maxPerDivision));
+				}
+
+				// If we have less than 50 (due to some divisions having fewer than maxPerDivision games), top off with remaining games
+				if (selectedRows.Count < 50 && validRows.Count > selectedRows.Count)
+				{
+					var remainingFromValid = validRows.Except(selectedRows).Take(50 - selectedRows.Count);
+					selectedRows.AddRange(remainingFromValid);
+				}
+			}
+
+			// Sort selected rows by date so the preview display is chronological
+			selectedRows = selectedRows.OrderBy(r => r.ParsedScheduledDateTime ?? DateTime.MinValue).ToList();
+
+			foreach (var row in selectedRows)
 			{
 				var divisionKey = (row.ParsedAgeGroup!.Value, row.ParsedGender!.Value);
 				if (!divisionsDict.TryGetValue(divisionKey, out var division))
@@ -304,22 +329,46 @@ public class CsvImportService : ICsvImportService
 				var (_, transformedHome) = await TransformAwayRegionTeamNameAsync(row.HomeTeam, division.Id);
 				var (_, transformedAway) = await TransformAwayRegionTeamNameAsync(row.AwayTeam, division.Id);
 
+				var divisionRows = rowsByDivision[divisionKey];
+
 				gamePreviews.Add(new CsvGamePreview
 				{
 					HomeTeam = transformedHome,
 					AwayTeam = transformedAway,
 					ScheduledDateTime = row.ParsedScheduledDateTime ?? DateTime.MinValue,
 					Location = $"{row.Field} - {row.Location}",
-					Round = CalculateRound(row.ParsedScheduledDateTime ?? DateTime.MinValue, validRows),
+					Round = CalculateRound(row.ParsedScheduledDateTime ?? DateTime.MinValue, divisionRows),
 					EventName = row.EventName
 				});
 			}
 
 			preview.Games = gamePreviews;
 
+			// Build a summary of the number of games per week per division, based on ALL valid rows
+			// (not just the sampled rows shown in the games preview table above).
+			preview.WeeklySummary = validRows
+				.Where(r => r.ParsedScheduledDateTime.HasValue)
+				.GroupBy(r => new
+				{
+					AgeGroup = r.ParsedAgeGroup!.Value,
+					Gender = r.ParsedGender!.Value,
+					WeekStartDate = StartOfWeek(r.ParsedScheduledDateTime!.Value.Date)
+				})
+				.Select(g => new CsvWeekDivisionSummary
+				{
+					AgeGroup = g.Key.AgeGroup,
+					Gender = g.Key.Gender,
+					WeekStartDate = g.Key.WeekStartDate,
+					GameCount = g.Count()
+				})
+				.OrderBy(s => s.WeekStartDate)
+				.ThenBy(s => s.AgeGroup)
+				.ThenBy(s => s.Gender)
+				.ToList();
+
 			if (validRows.Count > 50)
 			{
-				preview.Validation.Warnings.Add($"Showing first 50 of {validRows.Count} games in preview.");
+				preview.Validation.Warnings.Add($"Showing a sample of 50 of {validRows.Count} games in preview. See the weekly summary table below for the full totals per week per division.");
 			}
 		}
 		catch (Exception ex)
@@ -752,6 +801,13 @@ public class CsvImportService : ICsvImportService
 		gameDates.Add(gameDate.Date);
 		gameDates = gameDates.OrderBy(d => d).ToList();
 		return gameDates.IndexOf(gameDate.Date) + 1;
+	}
+
+	private static DateTime StartOfWeek(DateTime date)
+	{
+		// Weeks start on Sunday
+		int diff = (int)date.DayOfWeek;
+		return date.AddDays(-diff).Date;
 	}
 
 	private void AddTeamPreview(List<CsvTeamPreview> previews, string teamName, CsvGameRowDto row, HashSet<string> existingTeamNames, bool isHomeTeam)

@@ -3,6 +3,7 @@
 	ViewData["Title"] = "Preview CSV Import";
 	var teams = ViewBag.Teams as List<CsvTeamPreview> ?? new List<CsvTeamPreview>();
 	var games = ViewBag.Games as List<CsvGamePreview> ?? new List<CsvGamePreview>();
+	var weeklySummary = ViewBag.WeeklySummary as List<CsvWeekDivisionSummary> ?? new List<CsvWeekDivisionSummary>();
 	var seasonId = ViewBag.SeasonId;
 	var fileName = ViewBag.FileName;
 
@@ -81,7 +82,51 @@ else
 
 	<div class="card mb-4">
 		<div class="card-header bg-primary text-white">
-			<h5 class="mb-0">Games to Import (@games.Count)</h5>
+			<h5 class="mb-0">Games Per Week Per Division</h5>
+		</div>
+		<div class="card-body">
+			@if (weeklySummary.Count > 0)
+			{
+				<div class="table-responsive">
+					<table class="table table-sm table-striped">
+						<thead>
+							<tr>
+								<th>Week Of</th>
+								<th>Age Group</th>
+								<th>Gender</th>
+								<th>Games</th>
+							</tr>
+						</thead>
+						<tbody>
+							@foreach (var summary in weeklySummary.OrderBy(s => s.WeekStartDate).ThenBy(s => s.AgeGroup).ThenBy(s => s.Gender))
+							{
+								<tr>
+									<td>@summary.WeekStartDate.ToString("M/d/yyyy")</td>
+									<td>@summary.AgeGroup</td>
+									<td>@summary.Gender</td>
+									<td>@summary.GameCount</td>
+								</tr>
+							}
+						</tbody>
+						<tfoot>
+							<tr>
+								<th colspan="3" class="text-end">Total</th>
+								<th>@weeklySummary.Sum(s => s.GameCount)</th>
+							</tr>
+						</tfoot>
+					</table>
+				</div>
+			}
+			else
+			{
+				<p class="text-muted">No games to import.</p>
+			}
+		</div>
+	</div>
+
+	<div class="card mb-4">
+		<div class="card-header bg-primary text-white">
+			<h5 class="mb-0">Preview: first @games.Count games</h5>
 		</div>
 		<div class="card-body">
 			@if (games.Count > 0)

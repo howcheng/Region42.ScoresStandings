@@ -177,12 +177,14 @@ public class CsvImportController : Controller
 			// Store preview data for confirmation
 			var teamsJson = System.Text.Json.JsonSerializer.Serialize(preview.Teams);
 			var gamesJson = System.Text.Json.JsonSerializer.Serialize(preview.Games);
+			var weeklySummaryJson = System.Text.Json.JsonSerializer.Serialize(preview.WeeklySummary);
 
 			_logger.LogInformation("Serialized preview data - Teams: {TeamsLength} chars, Games: {GamesLength} chars",
 				teamsJson.Length, gamesJson.Length);
 
 			TempData["CsvPreviewTeams"] = teamsJson;
 			TempData["CsvPreviewGames"] = gamesJson;
+			TempData["CsvPreviewWeeklySummary"] = weeklySummaryJson;
 			TempData["SeasonId"] = targetSeason.Id;
 			TempData["SeasonName"] = targetSeason.Name;
 			TempData["FileName"] = csvFile.FileName;
@@ -212,6 +214,7 @@ public class CsvImportController : Controller
 
 		var teamsJson = TempData["CsvPreviewTeams"]?.ToString();
 		var gamesJson = TempData["CsvPreviewGames"]?.ToString();
+		var weeklySummaryJson = TempData["CsvPreviewWeeklySummary"]?.ToString();
 
 		_logger.LogInformation("Teams JSON length: {Length}", teamsJson?.Length ?? 0);
 		_logger.LogInformation("Games JSON length: {Length}", gamesJson?.Length ?? 0);
@@ -224,18 +227,23 @@ public class CsvImportController : Controller
 
 		var teams = System.Text.Json.JsonSerializer.Deserialize<List<CsvTeamPreview>>(teamsJson);
 		var games = System.Text.Json.JsonSerializer.Deserialize<List<CsvGamePreview>>(gamesJson);
+		var weeklySummary = string.IsNullOrEmpty(weeklySummaryJson)
+			? new List<CsvWeekDivisionSummary>()
+			: System.Text.Json.JsonSerializer.Deserialize<List<CsvWeekDivisionSummary>>(weeklySummaryJson);
 
 		_logger.LogInformation("Deserialized {TeamCount} teams and {GameCount} games", 
 			teams?.Count ?? 0, games?.Count ?? 0);
 
 		ViewBag.Teams = teams;
 		ViewBag.Games = games;
+		ViewBag.WeeklySummary = weeklySummary;
 		ViewBag.SeasonId = TempData["SeasonId"];
 		ViewBag.FileName = TempData["FileName"];
 
 		// Keep in TempData for the import action
 		TempData.Keep("CsvPreviewTeams");
 		TempData.Keep("CsvPreviewGames");
+		TempData.Keep("CsvPreviewWeeklySummary");
 		TempData.Keep("SeasonId");
 
 		return View();
