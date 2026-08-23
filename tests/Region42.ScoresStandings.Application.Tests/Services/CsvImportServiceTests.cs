@@ -660,6 +660,109 @@ public class CsvImportServiceTests
 
 	#endregion
 
+	#region Preview Tests
+
+	[Fact]
+	public async Task PreviewImportAsync_WithTeamFromPreviousSeason_ReturnsTeamMarkedAsNotExisting()
+	{
+		// Arrange - CSV contains a team named "14UB01 Eagles"
+		var csvContent = @"Match ID,Event Name,Group Name,Home Team,Away Team,Date,Start Time,End Time,Field,Location,Home Team Head Coach First Name,Home Team Head Coach Last Name,Away Team Head Coach First Name,Away Team Head Coach Last Name,Home Team Score,Away Team Score,Scheduled Status
+1,2025 Games 14UB-Group,Group A,14UB01 Eagles (Smith),14UB02 Tigers (Jones),2025-03-15,10:00,11:00,Field 1,Main Field,John,Smith,Mike,Jones,,,Scheduled";
+
+		var stream = CreateStreamFromString(csvContent);
+		var currentSeasonId = 2;
+		var previousSeasonId = 1;
+
+		var currentSeason = new Season { Id = currentSeasonId, Name = "Fall 2025", Year = 2025, IsActive = true };
+		var currentDivision = new Division { Id = 20, SeasonId = currentSeasonId, AgeGroup = AgeGroup.U14, Gender = Gender.Boys };
+
+		var oldDivision = new Division { Id = 10, SeasonId = previousSeasonId, AgeGroup = AgeGroup.U14, Gender = Gender.Boys };
+
+		// Suppose there is an existing team with the exact same name "14UB01 Eagles (Smith)" from the PREVIOUS season
+		var existingTeams = new List<Team>
+		{
+			new Team
+			{
+				Id = 1,
+				Name = "14UB01 Eagles (Smith)",
+				DivisionId = oldDivision.Id,
+				Division = oldDivision
+			}
+		};
+
+		_mockSeasonRepository.Setup(r => r.GetByIdAsync(currentSeasonId)).ReturnsAsync(currentSeason);
+		_mockDivisionRepository.Setup(r => r.FindAsync(It.IsAny<System.Linq.Expressions.Expression<Func<Division, bool>>>()))
+			.ReturnsAsync(new List<Division> { currentDivision });
+		_mockDivisionRepository.Setup(r => r.GetByIdAsync(currentDivision.Id)).ReturnsAsync(currentDivision);
+
+		_mockTeamRepository.Setup(r => r.FindAsync(It.IsAny<System.Linq.Expressions.Expression<Func<Team, bool>>>()))
+			.ReturnsAsync((System.Linq.Expressions.Expression<Func<Team, bool>> predicate) =>
+			{
+				return existingTeams.Where(predicate.Compile()).ToList();
+			});
+
+		// Act
+		var previewResult = await _service.PreviewImportAsync(stream, currentSeasonId);
+
+		// Assert
+		previewResult.Validation.IsValid.Should().BeTrue();
+		previewResult.Teams.Should().HaveCount(2);
+
+		var homeTeamPreview = previewResult.Teams.FirstOrDefault(t => t.TeamName == "14UB01 Eagles (Smith)");
+		homeTeamPreview.Should().NotBeNull();
+		homeTeamPreview!.IsExisting.Should().BeFalse("because the identical team is in a different season");
+	}
+
+	[Fact]
+	public async Task PreviewImportAsync_WithTeamFromCurrentSeason_ReturnsTeamMarkedAsExisting()
+	{
+		// Arrange - CSV contains a team named "14UB01 Eagles"
+		var csvContent = @"Match ID,Event Name,Group Name,Home Team,Away Team,Date,Start Time,End Time,Field,Location,Home Team Head Coach First Name,Home Team Head Coach Last Name,Away Team Head Coach First Name,Away Team Head Coach Last Name,Home Team Score,Away Team Score,Scheduled Status
+1,2025 Games 14UB-Group,Group A,14UB01 Eagles (Smith),14UB02 Tigers (Jones),2025-03-15,10:00,11:00,Field 1,Main Field,John,Smith,Mike,Jones,,,Scheduled";
+
+		var stream = CreateStreamFromString(csvContent);
+		var currentSeasonId = 2;
+
+		var currentSeason = new Season { Id = currentSeasonId, Name = "Fall 2025", Year = 2025, IsActive = true };
+		var currentDivision = new Division { Id = 20, SeasonId = currentSeasonId, AgeGroup = AgeGroup.U14, Gender = Gender.Boys };
+
+		// Suppose there is an existing team with the exact same name "14UB01 Eagles (Smith)" from the CURRENT season
+		var existingTeams = new List<Team>
+		{
+			new Team
+			{
+				Id = 1,
+				Name = "14UB01 Eagles (Smith)",
+				DivisionId = currentDivision.Id,
+				Division = currentDivision
+			}
+		};
+
+		_mockSeasonRepository.Setup(r => r.GetByIdAsync(currentSeasonId)).ReturnsAsync(currentSeason);
+		_mockDivisionRepository.Setup(r => r.FindAsync(It.IsAny<System.Linq.Expressions.Expression<Func<Division, bool>>>()))
+			.ReturnsAsync(new List<Division> { currentDivision });
+		_mockDivisionRepository.Setup(r => r.GetByIdAsync(currentDivision.Id)).ReturnsAsync(currentDivision);
+
+		_mockTeamRepository.Setup(r => r.FindAsync(It.IsAny<System.Linq.Expressions.Expression<Func<Team, bool>>>()))
+			.ReturnsAsync((System.Linq.Expressions.Expression<Func<Team, bool>> predicate) =>
+			{
+				return existingTeams.Where(predicate.Compile()).ToList();
+			});
+
+		// Act
+		var previewResult = await _service.PreviewImportAsync(stream, currentSeasonId);
+
+		// Assert
+		previewResult.Validation.IsValid.Should().BeTrue();
+		previewResult.Teams.Should().HaveCount(2);
+
+		var homeTeamPreview = previewResult.Teams.FirstOrDefault(t => t.TeamName == "14UB01 Eagles (Smith)");
+		homeTeamPreview.Should().NotBeNull();
+		homeTeamPreview!.IsExisting.Should().BeTrue("because the identical team is in the current season");
+	}
+
+	#endregion
+
 	#region Helper Methods
 
 	private static Stream CreateStreamFromString(string content)
