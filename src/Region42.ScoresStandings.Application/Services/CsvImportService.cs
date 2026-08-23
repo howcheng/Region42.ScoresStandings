@@ -269,8 +269,8 @@ public class CsvImportService : ICsvImportService
 				}
 			}
 
-			// Get existing teams
-			var existingTeams = await _teamRepository.GetAllAsync();
+			// Get existing teams for the current season
+			var existingTeams = await _teamRepository.FindAsync(t => t.Division.SeasonId == seasonId);
 			var existingTeamNames = new HashSet<string>(existingTeams.Select(t => t.Name), StringComparer.OrdinalIgnoreCase);
 
 			// Add team previews with transformed names
