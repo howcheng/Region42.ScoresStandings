@@ -211,8 +211,8 @@ public class HomeController : Controller
                 .Select(g => new GameScoreDisplay
                 {
                     GameId = g.Id,
-                    HomeTeamName = g.HomeTeam.Name,
-                    AwayTeamName = g.AwayTeam.Name,
+                    HomeTeamName = g.HomeTeam?.Name ?? "Unknown",
+                    AwayTeamName = g.AwayTeam?.Name ?? "Unknown",
                     HomeScore = g.Score?.HomeScore,
                     AwayScore = g.Score?.AwayScore,
                     ScheduledDateTime = TimezoneHelper.ToPacificTime(g.ScheduledDateTime),

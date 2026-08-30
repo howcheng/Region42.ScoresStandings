@@ -60,7 +60,41 @@
 			return false;
 		}
 
+		// Validate that rescheduled games have a new date/time entered
+		const statusSelects = document.querySelectorAll('.game-status-select');
+		let missingRescheduleDates = [];
+		statusSelects.forEach((select, i) => {
+			const rescheduleFields = document.getElementById(`rescheduleFields_${select.dataset.index}`);
+			if (!rescheduleFields) {
+				return;
+			}
+			const isRescheduled = select.options[select.selectedIndex].text === 'Rescheduled';
+			const newDateTime = rescheduleFields.querySelector('input[type="datetime-local"]');
+			if (isRescheduled && (!newDateTime || newDateTime.value.trim() === '')) {
+				missingRescheduleDates.push(i + 1);
+			}
+		});
+
+		if (missingRescheduleDates.length > 0) {
+			event.preventDefault();
+			alert('Error: A new date/time is required for rescheduled games.\n\n' +
+				'Games missing a new date/time: ' + missingRescheduleDates.join(', '));
+			return false;
+		}
+
 		return true;
+	}
+
+	/**
+	 * Toggle visibility of reschedule fields based on selected game status
+	 */
+	function toggleRescheduleFields(select) {
+		const rescheduleFields = document.getElementById(`rescheduleFields_${select.dataset.index}`);
+		if (!rescheduleFields) {
+			return;
+		}
+		const isRescheduled = select.options[select.selectedIndex].text === 'Rescheduled';
+		rescheduleFields.classList.toggle('d-none', !isRescheduled);
 	}
 
 	/**
@@ -84,6 +118,11 @@
 		if (form) {
 			form.addEventListener('submit', validateScores);
 		}
+
+		// Attach status change listeners for reschedule field toggling
+		document.querySelectorAll('.game-status-select').forEach(select => {
+			select.addEventListener('change', () => toggleRescheduleFields(select));
+		});
 	}
 
 	// Initialize when DOM is ready

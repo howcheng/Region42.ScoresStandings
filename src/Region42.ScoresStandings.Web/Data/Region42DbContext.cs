@@ -155,6 +155,9 @@ public class Region42DbContext : DbContext, IRegion42DbContext
 				.HasForeignKey(e => e.AwayTeamId)
 				.OnDelete(DeleteBehavior.Restrict);
 
+			entity.Navigation(e => e.HomeTeam).AutoInclude();
+			entity.Navigation(e => e.AwayTeam).AutoInclude();
+
 			entity.HasIndex(e => new { e.DivisionId, e.Round, e.ScheduledDateTime });
 			entity.HasIndex(e => e.ScheduledDateTime);
 		});

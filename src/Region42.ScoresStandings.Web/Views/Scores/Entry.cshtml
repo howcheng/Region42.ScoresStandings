@@ -1,4 +1,5 @@
 @model IEnumerable<Region42.ScoresStandings.Application.DTOs.ScoreEntryDto>
+@using Region42.ScoresStandings.Domain.Enums
 
 @{
 	ViewData["Title"] = "Score Entry";
@@ -68,6 +69,7 @@
 					<div class="score-field score-field-score">Home Score</div>
 					<div class="score-field score-field-score">Away Score</div>
 					<div class="score-field score-field-team">Away Team</div>
+					<div class="score-field score-field-status">Status</div>
 					<div class="score-field score-field-modified">Last Modified</div>
 				</div>
 				@{
@@ -136,6 +138,39 @@
 									}
 								}
 							</select>
+						</div>
+						<div class="score-field score-field-status">
+							<label for="status_@index" class="score-field-label d-md-none">Status</label>
+							<select id="status_@index" name="scores[@index].Status" class="form-select form-select-sm game-status-select" data-index="@index">
+								@foreach (GameStatus status in Enum.GetValues<GameStatus>())
+								{
+									<option value="@((int)status)" selected="@(status == game.Status)">@status</option>
+								}
+							</select>
+							<div id="rescheduleFields_@index" class="reschedule-fields mt-2 @(game.Status == GameStatus.Rescheduled ? "" : "d-none")">
+								<label for="newDateTime_@index" class="form-label form-label-sm">New Date/Time</label>
+								<input type="datetime-local"
+									   id="newDateTime_@index"
+									   name="scores[@index].NewScheduledDateTime"
+									   value="@(game.Status == GameStatus.Rescheduled ? game.ScheduledDateTime.ToString("yyyy-MM-ddTHH:mm") : "")"
+									   class="form-control form-control-sm" />
+								<label for="newLocation_@index" class="form-label form-label-sm mt-1">New Location</label>
+								<input type="text"
+									   id="newLocation_@index"
+									   name="scores[@index].NewLocation"
+									   value="@game.Location"
+									   class="form-control form-control-sm" />
+								<label for="newRound_@index" class="form-label form-label-sm mt-1">New Round (optional)</label>
+								<input type="number"
+									   id="newRound_@index"
+									   name="scores[@index].NewRound"
+									   value=""
+									   placeholder="@game.Round (current)"
+									   min="1"
+									   max="@((rounds?.Count() ?? 0) + 1)"
+									   class="form-control form-control-sm" />
+								<small class="text-muted">Leave blank to keep round @game.Round. Set to @((rounds?.Count() ?? 0) + 1) for a new makeup round.</small>
+							</div>
 						</div>
 						<div class="score-field score-field-modified">
 							<label class="score-field-label d-md-none">Last Modified</label>

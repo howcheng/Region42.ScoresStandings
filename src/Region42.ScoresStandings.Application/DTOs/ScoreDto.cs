@@ -1,3 +1,5 @@
+using Region42.ScoresStandings.Domain.Enums;
+
 namespace Region42.ScoresStandings.Application.DTOs;
 
 /// <summary>
@@ -13,6 +15,7 @@ public class ScoreEntryDto
 	public DateTime ScheduledDateTime { get; set; }
 	public string Location { get; set; } = string.Empty;
 	public int Round { get; set; }
+	public GameStatus Status { get; set; }
 	public int? HomeScore { get; set; }
 	public int? AwayScore { get; set; }
 	public DateTime? LastModified { get; set; }
@@ -29,4 +32,8 @@ public class ScoreUpdateDto
 	public int AwayTeamId { get; set; }
 	public int? HomeScore { get; set; }
 	public int? AwayScore { get; set; }
+	public GameStatus Status { get; set; }
+	public DateTime? NewScheduledDateTime { get; set; }
+	public string? NewLocation { get; set; }
+	public int? NewRound { get; set; }
 }

@@ -5,6 +5,7 @@ using Region42.ScoresStandings.Application.DTOs;
 using Region42.ScoresStandings.Application.Helpers;
 using Region42.ScoresStandings.Application.Interfaces;
 using Region42.ScoresStandings.Domain.Entities;
+using Region42.ScoresStandings.Domain.Enums;
 using Region42.ScoresStandings.Domain.Interfaces;
 
 namespace Region42.ScoresStandings.Web.Controllers;
@@ -117,6 +118,7 @@ public class ScoresController : Controller
 				ScheduledDateTime = TimezoneHelper.ToPacificTime(game.ScheduledDateTime),
 				Location = game.Location,
 				Round = game.Round,
+				Status = game.Status,
 				HomeScore = score?.HomeScore,
 				AwayScore = score?.AwayScore,
 				LastModified = score?.ModifiedAt,
@@ -140,40 +142,62 @@ public class ScoresController : Controller
 			return RedirectToAction(nameof(Entry), new { divisionId, round });
 		}
 
-		// Validate team uniqueness: no team should appear more than once in the round
-		var teamAppearances = new Dictionary<int, int>();
+		// Validate home/away teams differ, and compute the effective round for each game
+		// (the round it will end up in after this save, accounting for reschedules that
+		// move a game into a different round).
+		var effectiveRounds = new Dictionary<int, int>(); // gameId -> effective round
 		foreach (var score in scores)
 		{
-			// Count home team appearances
-			if (teamAppearances.ContainsKey(score.HomeTeamId))
-				teamAppearances[score.HomeTeamId]++;
-			else
-				teamAppearances[score.HomeTeamId] = 1;
-
-			// Count away team appearances
-			if (teamAppearances.ContainsKey(score.AwayTeamId))
-				teamAppearances[score.AwayTeamId]++;
-			else
-				teamAppearances[score.AwayTeamId] = 1;
-
-			// Validate home and away teams are different
 			if (score.HomeTeamId == score.AwayTeamId)
 			{
 				TempData["ErrorMessage"] = "A team cannot play against itself. Please check the schedule.";
 				return RedirectToAction(nameof(Entry), new { divisionId, round });
 			}
+
+			var effectiveRound = round;
+			if (score.Status == GameStatus.Rescheduled && score.NewRound.HasValue)
+			{
+				effectiveRound = score.NewRound.Value;
+			}
+			effectiveRounds[score.GameId] = effectiveRound;
 		}
 
-		// Check for duplicate team assignments
-		var duplicateTeams = teamAppearances.Where(kvp => kvp.Value > 1).Select(kvp => kvp.Key).ToList();
-		if (duplicateTeams.Any())
+		// Validate team uniqueness per effective round. Games in this batch may end up
+		// in rounds other than the page's current round, so for each distinct round
+		// touched we must also consider games already in the database for that round
+		// (excluding games from this batch, which are represented by their new state).
+		var distinctRounds = effectiveRounds.Values.Distinct().ToList();
+		var batchGameIds = scores.Select(s => s.GameId).ToHashSet();
+
+		foreach (var targetRound in distinctRounds)
 		{
-			var teams = await _teamService.GetTeamsByDivisionAsync(divisionId);
-			var teamNames = teams.Where(t => duplicateTeams.Contains(t.Id))
-				.Select(t => t.Name)
-				.ToList();
-			TempData["ErrorMessage"] = $"The following team(s) appear more than once in this round: {string.Join(", ", teamNames)}. Each team can only have one game per round.";
-			return RedirectToAction(nameof(Entry), new { divisionId, round });
+			// Team appearances from the batch that land in this round
+			var roundTeamAppearances = new Dictionary<int, int>();
+			foreach (var score in scores.Where(s => effectiveRounds[s.GameId] == targetRound))
+			{
+				roundTeamAppearances[score.HomeTeamId] = roundTeamAppearances.GetValueOrDefault(score.HomeTeamId) + 1;
+				roundTeamAppearances[score.AwayTeamId] = roundTeamAppearances.GetValueOrDefault(score.AwayTeamId) + 1;
+			}
+
+			// Existing games already in this round in the database (excluding games in this batch,
+			// since their post-save state is already reflected above)
+			var existingGamesInRound = await _gameService.GetGamesByDivisionAndRoundAsync(divisionId, targetRound);
+			foreach (var existingGame in existingGamesInRound.Where(g => !batchGameIds.Contains(g.Id)))
+			{
+				roundTeamAppearances[existingGame.HomeTeamId] = roundTeamAppearances.GetValueOrDefault(existingGame.HomeTeamId) + 1;
+				roundTeamAppearances[existingGame.AwayTeamId] = roundTeamAppearances.GetValueOrDefault(existingGame.AwayTeamId) + 1;
+			}
+
+			var duplicateTeams = roundTeamAppearances.Where(kvp => kvp.Value > 1).Select(kvp => kvp.Key).ToList();
+			if (duplicateTeams.Any())
+			{
+				var teams = await _teamService.GetTeamsByDivisionAsync(divisionId);
+				var teamNames = teams.Where(t => duplicateTeams.Contains(t.Id))
+					.Select(t => t.Name)
+					.ToList();
+				TempData["ErrorMessage"] = $"The following team(s) would appear more than once in round {targetRound}: {string.Join(", ", teamNames)}. Each team can only have one game per round.";
+				return RedirectToAction(nameof(Entry), new { divisionId, round });
+			}
 		}
 
 		var successCount = 0;
@@ -204,14 +228,52 @@ public class ScoresController : Controller
 					continue;
 				}
 
+				// Validate rescheduled games have a new date/time
+				if (scoreUpdate.Status == GameStatus.Rescheduled && !scoreUpdate.NewScheduledDateTime.HasValue)
+				{
+					errorCount++;
+					errors.Add($"Game {scoreUpdate.GameId}: A new date/time is required when marking a game as Rescheduled.");
+					_logger.LogWarning("Rescheduled game {GameId} missing new date/time", scoreUpdate.GameId);
+					continue;
+				}
+
 				bool gameChanged = false;
 				if (game.HomeTeamId != scoreUpdate.HomeTeamId || game.AwayTeamId != scoreUpdate.AwayTeamId)
 				{
 					game.HomeTeamId = scoreUpdate.HomeTeamId;
 					game.AwayTeamId = scoreUpdate.AwayTeamId;
-					await _gameService.UpdateGameAsync(game);
 					gameChanged = true;
-					_logger.LogInformation("Updated teams for game {GameId}: Home={HomeTeamId}, Away={AwayTeamId}",
+				}
+
+				if (game.Status != scoreUpdate.Status)
+				{
+					game.Status = scoreUpdate.Status;
+					gameChanged = true;
+					_logger.LogInformation("Updated status for game {GameId} to {Status}", scoreUpdate.GameId, scoreUpdate.Status);
+				}
+
+				if (scoreUpdate.Status == GameStatus.Rescheduled)
+				{
+					game.ScheduledDateTime = TimezoneHelper.ToUtc(scoreUpdate.NewScheduledDateTime!.Value);
+					if (!string.IsNullOrWhiteSpace(scoreUpdate.NewLocation))
+					{
+						game.Location = scoreUpdate.NewLocation;
+					}
+					if (scoreUpdate.NewRound.HasValue && scoreUpdate.NewRound.Value != game.Round)
+					{
+						_logger.LogInformation("Moving game {GameId} from round {OldRound} to round {NewRound}",
+							scoreUpdate.GameId, game.Round, scoreUpdate.NewRound.Value);
+						game.Round = scoreUpdate.NewRound.Value;
+					}
+					gameChanged = true;
+					_logger.LogInformation("Rescheduled game {GameId} to {ScheduledDateTime} at {Location}",
+						scoreUpdate.GameId, game.ScheduledDateTime, game.Location);
+				}
+
+				if (gameChanged)
+				{
+					await _gameService.UpdateGameAsync(game);
+					_logger.LogInformation("Updated game {GameId}: Home={HomeTeamId}, Away={AwayTeamId}",
 						scoreUpdate.GameId, scoreUpdate.HomeTeamId, scoreUpdate.AwayTeamId);
 				}
 

@@ -234,6 +234,52 @@ public class HomeControllerTests
 	}
 
 	[Fact]
+	public async Task Standings_WithGameMissingTeamNavigationProperties_DoesNotThrow()
+	{
+		// Arrange
+		var season = _builder.BuildSeason();
+		var division = _builder.BuildDivision(season.Id, AgeGroup.U14, Gender.Girls);
+		var throughRound = 3;
+
+		var standingsResult = new StandingsResult
+		{
+			DivisionId = division.Id,
+			DivisionName = $"{division.AgeGroup} {division.Gender}",
+			ThroughRound = throughRound,
+			CalculatedAt = DateTime.UtcNow,
+			Standings = new List<TeamStanding>()
+		};
+
+		_mockSeasonRepo.Setup(r => r.GetAllAsync())
+			.ReturnsAsync(new List<Season> { season });
+		_mockDivisionRepo.Setup(r => r.FindAsync(It.IsAny<Expression<Func<Division, bool>>>()))
+			.ReturnsAsync(new List<Division> { division });
+
+		// Simulate a cancelled game returned without HomeTeam/AwayTeam navigation properties populated
+		var games = new List<Game>
+		{
+			_builder.BuildGame(division.Id, 1, 2, throughRound, GameStatus.Cancelled)
+		};
+		_mockGameService.Setup(s => s.GetGamesByDivisionAndRoundAsync(division.Id, throughRound))
+			.ReturnsAsync(games);
+
+		_mockStandingsService.Setup(s => s.GetStandingsByRoundAsync(division.Id, throughRound))
+			.ReturnsAsync(standingsResult);
+
+		// Act
+		var result = await _controller.Standings(division.Id, throughRound, null);
+
+		// Assert
+		result.Should().BeOfType<ViewResult>();
+		var viewResult = result as ViewResult;
+		var model = viewResult!.Model as StandingsViewModel;
+		model.Should().NotBeNull();
+		model!.Scores.Should().HaveCount(1);
+		model.Scores[0].HomeTeamName.Should().Be("Unknown");
+		model.Scores[0].AwayTeamName.Should().Be("Unknown");
+	}
+
+	[Fact]
 	public async Task Standings_WhenServiceThrowsException_ReturnsViewWithErrorMessage()
 	{
 		// Arrange

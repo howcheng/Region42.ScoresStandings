@@ -206,12 +206,14 @@ public class GameService : IGameService
 			throw new InvalidOperationException("A team cannot play against itself.");
 		}
 
-		// Validate round number
-		if (game.Round < 1 || game.Round > division.TotalRounds)
+		// Validate round number. Allow one round beyond TotalRounds to support
+		// rescheduling games into a new makeup round (e.g., after weather cancellations).
+		var maxAllowedRound = division.TotalRounds + 1;
+		if (game.Round < 1 || game.Round > maxAllowedRound)
 		{
 			_logger.LogWarning("Invalid round number {Round} for division with {TotalRounds} rounds", 
 				game.Round, division.TotalRounds);
-			throw new ArgumentException($"Round must be between 1 and {division.TotalRounds}.", nameof(game.Round));
+			throw new ArgumentException($"Round must be between 1 and {maxAllowedRound}.", nameof(game.Round));
 		}
 
 		// Check for schedule conflicts (excluding this game)
