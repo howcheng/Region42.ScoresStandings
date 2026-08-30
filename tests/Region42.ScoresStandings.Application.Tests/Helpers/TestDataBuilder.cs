@@ -44,8 +44,6 @@ public static class TestDataBuilder
 			Name = name,
 			ShortName = $"T{id}",
 			ContactName = contactName,
-			ContactEmail = "coach@example.com",
-			ContactPhone = "555-1234",
 			IsActive = isActive,
 			CreatedAt = DateTime.UtcNow,
 			CreatedBy = "test-user"

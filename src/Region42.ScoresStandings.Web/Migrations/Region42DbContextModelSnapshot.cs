@@ -81,7 +81,7 @@ namespace Region42.ScoresStandings.Web.Migrations
                     b.HasIndex("SeasonId", "AgeGroup", "Gender")
                         .IsUnique();
 
-                    b.ToTable("Divisions");
+                    b.ToTable("Divisions", (string)null);
                 });
 
             modelBuilder.Entity("Region42.ScoresStandings.Domain.Entities.Game", b =>
@@ -145,7 +145,7 @@ namespace Region42.ScoresStandings.Web.Migrations
 
                     b.HasIndex("DivisionId", "Round", "ScheduledDateTime");
 
-                    b.ToTable("Games");
+                    b.ToTable("Games", (string)null);
                 });
 
             modelBuilder.Entity("Region42.ScoresStandings.Domain.Entities.Score", b =>
@@ -190,7 +190,7 @@ namespace Region42.ScoresStandings.Web.Migrations
                     b.HasIndex("GameId")
                         .IsUnique();
 
-                    b.ToTable("Scores");
+                    b.ToTable("Scores", (string)null);
                 });
 
             modelBuilder.Entity("Region42.ScoresStandings.Domain.Entities.Season", b =>
@@ -240,7 +240,7 @@ namespace Region42.ScoresStandings.Web.Migrations
 
                     b.HasIndex("Year");
 
-                    b.ToTable("Seasons");
+                    b.ToTable("Seasons", (string)null);
                 });
 
             modelBuilder.Entity("Region42.ScoresStandings.Domain.Entities.Settings", b =>
@@ -283,7 +283,7 @@ namespace Region42.ScoresStandings.Web.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Settings");
+                    b.ToTable("Settings", (string)null);
                 });
 
             modelBuilder.Entity("Region42.ScoresStandings.Domain.Entities.Team", b =>
@@ -352,7 +352,7 @@ namespace Region42.ScoresStandings.Web.Migrations
 
                     b.HasIndex("DivisionId", "Name");
 
-                    b.ToTable("Teams");
+                    b.ToTable("Teams", (string)null);
                 });
 
             modelBuilder.Entity("Region42.ScoresStandings.Domain.Entities.User", b =>
@@ -408,7 +408,7 @@ namespace Region42.ScoresStandings.Web.Migrations
                     b.HasIndex("GoogleId")
                         .IsUnique();
 
-                    b.ToTable("Users");
+                    b.ToTable("Users", (string)null);
                 });
 
             modelBuilder.Entity("Region42.ScoresStandings.Domain.Entities.VolunteerPoints", b =>
@@ -457,7 +457,7 @@ namespace Region42.ScoresStandings.Web.Migrations
 
                     b.HasIndex("TeamId", "Round");
 
-                    b.ToTable("VolunteerPoints");
+                    b.ToTable("VolunteerPoints", (string)null);
                 });
 
             modelBuilder.Entity("Region42.ScoresStandings.Domain.Entities.Division", b =>

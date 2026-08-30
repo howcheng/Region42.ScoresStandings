@@ -9,8 +9,6 @@ public class TeamDto
 	public string Name { get; set; } = string.Empty;
 	public int DivisionId { get; set; }
 	public string ContactName { get; set; } = string.Empty;
-	public string ContactEmail { get; set; } = string.Empty;
-	public string ContactPhone { get; set; } = string.Empty;
 	public bool IsActive { get; set; }
 }
 
@@ -24,8 +22,6 @@ public class TeamDisplayDto
 	public int DivisionId { get; set; }
 	public string DivisionName { get; set; } = string.Empty;
 	public string ContactName { get; set; } = string.Empty;
-	public string ContactEmail { get; set; } = string.Empty;
-	public string ContactPhone { get; set; } = string.Empty;
 	public bool IsActive { get; set; }
 	public int GamesPlayed { get; set; }
 }

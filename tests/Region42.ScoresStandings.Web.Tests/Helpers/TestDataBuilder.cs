@@ -53,8 +53,6 @@ public class TestDataBuilder
 			ShortName = name.Length > 10 ? name.Substring(0, 10) : name,
 			DivisionId = divisionId,
 			ContactName = "Test Contact",
-			ContactEmail = "test@test.com",
-			ContactPhone = "555-1234",
 			IsActive = isActive,
 			CreatedAt = DateTime.UtcNow,
 			ModifiedAt = DateTime.UtcNow,

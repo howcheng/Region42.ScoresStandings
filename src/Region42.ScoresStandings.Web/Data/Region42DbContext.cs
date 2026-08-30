@@ -119,8 +119,6 @@ public class Region42DbContext : DbContext, IRegion42DbContext
 			entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
 			entity.Property(e => e.ShortName).IsRequired().HasMaxLength(50);
 			entity.Property(e => e.ContactName).HasMaxLength(200);
-			entity.Property(e => e.ContactEmail).HasMaxLength(200);
-			entity.Property(e => e.ContactPhone).HasMaxLength(50);
 			entity.Property(e => e.IsActive).IsRequired();
 			entity.Property(e => e.RowVersion).IsConcurrencyToken();
 
