@@ -60,97 +60,106 @@
 			<input type="hidden" name="divisionId" value="@selectedDivisionId" />
 			<input type="hidden" name="round" value="@selectedRound" />
 
-			<div class="table-responsive">
-				<table class="table table-striped table-hover">
-					<thead>
-						<tr>
-							<th>Date/Time</th>
-							<th>Location</th>
-							<th>Home Team</th>
-							<th>Home Score</th>
-							<th>Away Score</th>
-							<th>Away Team</th>
-							<th>Last Modified</th>
-						</tr>
-					</thead>
-					<tbody>
-						@{
-							var index = 0;
-						}
-						@foreach (var game in Model)
-						{
-							<tr>
-								<td>
-									@game.ScheduledDateTime.ToString("ddd, MMM d")
-									<br />
-									<small class="text-muted">@game.ScheduledDateTime.ToString("h:mm tt")</small>
-								</td>
-								<td>@game.Location</td>
-								<td>
-									<input type="hidden" name="scores[@index].GameId" value="@game.GameId" />
-									<select name="scores[@index].HomeTeamId" class="form-select form-select-sm" required>
-										@if (teams != null)
-										{
-											foreach (var team in teams)
-											{
-												<option value="@team.Value" selected="@(team.Value == game.HomeTeamId.ToString())">
-													@team.Text
-												</option>
-											}
-										}
-									</select>
-								</td>
-								<td>
-									<input type="number" 
-										   name="scores[@index].HomeScore" 
-										   value="@game.HomeScore" 
-										   class="form-control form-control-sm score-input" 
-										   min="0" 
-										   max="99" />
-								</td>
-								<td>
-									<input type="number" 
-										   name="scores[@index].AwayScore" 
-										   value="@game.AwayScore" 
-										   class="form-control form-control-sm score-input" 
-										   min="0" 
-										   max="99" />
-								</td>
-								<td>
-									<select name="scores[@index].AwayTeamId" class="form-select form-select-sm" required>
-										@if (teams != null)
-										{
-											foreach (var team in teams)
-											{
-												<option value="@team.Value" selected="@(team.Value == game.AwayTeamId.ToString())">
-													@team.Text
-												</option>
-											}
-										}
-									</select>
-								</td>
-								<td>
-									@if (game.LastModified.HasValue)
+			<div id="scoresList">
+				<div class="score-row score-row-header d-none d-md-flex">
+					<div class="score-field score-field-datetime">Date/Time</div>
+					<div class="score-field score-field-location">Location</div>
+					<div class="score-field score-field-team">Home Team</div>
+					<div class="score-field score-field-score">Home Score</div>
+					<div class="score-field score-field-score">Away Score</div>
+					<div class="score-field score-field-team">Away Team</div>
+					<div class="score-field score-field-modified">Last Modified</div>
+				</div>
+				@{
+					var index = 0;
+				}
+				@foreach (var game in Model)
+				{
+					<div class="score-row">
+						<div class="score-field score-field-datetime">
+							<label class="score-field-label d-md-none">Date/Time</label>
+							<div class="score-field-value">
+								@game.ScheduledDateTime.ToString("ddd, MMM d")
+								<br />
+								<small class="text-muted">@game.ScheduledDateTime.ToString("h:mm tt")</small>
+							</div>
+						</div>
+						<div class="score-field score-field-location">
+							<label class="score-field-label d-md-none">Location</label>
+							<div class="score-field-value">@game.Location</div>
+						</div>
+						<div class="score-field score-field-team">
+							<label for="homeTeam_@index" class="score-field-label d-md-none">Home Team</label>
+							<input type="hidden" name="scores[@index].GameId" value="@game.GameId" />
+							<select id="homeTeam_@index" name="scores[@index].HomeTeamId" class="form-select form-select-sm" required>
+								@if (teams != null)
+								{
+									foreach (var team in teams)
 									{
-										<small>
-											@game.LastModified.Value.ToString("MM/dd/yyyy")
-											<br />
-											@if (!string.IsNullOrEmpty(game.LastModifiedBy))
-											{
-												<span class="text-muted">by @game.LastModifiedBy</span>
-											}
-										</small>
+										<option value="@team.Value" selected="@(team.Value == game.HomeTeamId.ToString())">
+											@team.Text
+										</option>
 									}
-									else
+								}
+							</select>
+						</div>
+						<div class="score-field score-field-score">
+							<label for="homeScore_@index" class="score-field-label d-md-none">Home Score</label>
+							<input type="number"
+								   id="homeScore_@index"
+								   name="scores[@index].HomeScore"
+								   value="@game.HomeScore"
+								   class="form-control form-control-sm score-input"
+								   min="0"
+								   max="99" />
+						</div>
+						<div class="score-field score-field-score">
+							<label for="awayScore_@index" class="score-field-label d-md-none">Away Score</label>
+							<input type="number"
+								   id="awayScore_@index"
+								   name="scores[@index].AwayScore"
+								   value="@game.AwayScore"
+								   class="form-control form-control-sm score-input"
+								   min="0"
+								   max="99" />
+						</div>
+						<div class="score-field score-field-team">
+							<label for="awayTeam_@index" class="score-field-label d-md-none">Away Team</label>
+							<select id="awayTeam_@index" name="scores[@index].AwayTeamId" class="form-select form-select-sm" required>
+								@if (teams != null)
+								{
+									foreach (var team in teams)
 									{
-										<span class="text-muted">Not entered</span>
+										<option value="@team.Value" selected="@(team.Value == game.AwayTeamId.ToString())">
+											@team.Text
+										</option>
 									}
-								</td>
-							</tr>
-							index++;
-						}
-					</tbody>
-				</table>
+								}
+							</select>
+						</div>
+						<div class="score-field score-field-modified">
+							<label class="score-field-label d-md-none">Last Modified</label>
+							<div class="score-field-value">
+								@if (game.LastModified.HasValue)
+								{
+									<small>
+										@game.LastModified.Value.ToString("MM/dd/yyyy")
+										<br />
+										@if (!string.IsNullOrEmpty(game.LastModifiedBy))
+										{
+											<span class="text-muted">by @game.LastModifiedBy</span>
+										}
+									</small>
+								}
+								else
+								{
+									<span class="text-muted">Not entered</span>
+								}
+							</div>
+						</div>
+					</div>
+					index++;
+				}
 			</div>
 
 			<div class="mt-3">

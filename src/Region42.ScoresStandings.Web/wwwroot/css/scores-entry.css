@@ -3,3 +3,78 @@
 .score-input {
 	width: 70px;
 }
+
+#scoresList {
+	display: flex;
+	flex-direction: column;
+	gap: 0.5rem;
+}
+
+.score-row {
+	display: flex;
+	flex-direction: column;
+	border: 1px solid #dee2e6;
+	border-radius: .25rem;
+	padding: .75rem;
+	gap: .5rem;
+}
+
+.score-row:nth-of-type(even) {
+	background-color: rgba(0, 0, 0, .02);
+}
+
+.score-row-header {
+	border: none;
+	background-color: transparent;
+	font-weight: bold;
+	padding: .25rem .75rem;
+}
+
+.score-field {
+	display: flex;
+	flex-direction: column;
+}
+
+.score-field-label {
+	font-weight: bold;
+	margin-bottom: .15rem;
+}
+
+/* Full-size (tablet/desktop) layout: rows become a single horizontal flex row */
+@media (min-width: 768px) {
+	.score-row {
+		flex-direction: row;
+		align-items: center;
+		gap: 0;
+	}
+
+	.score-row:hover {
+		background-color: rgba(0, 0, 0, .04);
+	}
+
+	.score-field {
+		flex-direction: row;
+		align-items: center;
+		padding: 0 .5rem;
+	}
+
+	.score-field-datetime {
+		flex: 1.5;
+	}
+
+	.score-field-location {
+		flex: 1.5;
+	}
+
+	.score-field-team {
+		flex: 2;
+	}
+
+	.score-field-score {
+		flex: 1;
+	}
+
+	.score-field-modified {
+		flex: 1.5;
+	}
+}
