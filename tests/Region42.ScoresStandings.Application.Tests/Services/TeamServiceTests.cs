@@ -318,8 +318,10 @@ public class TeamServiceTests
 		// Assert
 		result.Should().NotBeNull();
 		result.Name.Should().Be("New Name");
+		result.Should().BeSameAs(existingTeam, "the tracked entity should be updated in place instead of attaching the posted, untracked instance");
 
-		_mockTeamRepository.Verify(r => r.Update(It.IsAny<Team>()), Times.Once);
+		_mockTeamRepository.Verify(r => r.Update(existingTeam), Times.Once);
+		_mockTeamRepository.Verify(r => r.Update(updatedTeam), Times.Never);
 		_mockTeamRepository.Verify(r => r.SaveChangesAsync(), Times.Once);
 	}
 

@@ -58,7 +58,7 @@
 				<button type="submit" class="btn btn-primary">
 					<i class="bi bi-check-circle"></i> Save Changes
 				</button>
-				<a asp-action="Index" class="btn btn-secondary">
+				<a asp-action="Index" asp-route-seasonId="@Model.SeasonId" class="btn btn-secondary">
 					<i class="bi bi-x-circle"></i> Cancel
 				</a>
 			</div>

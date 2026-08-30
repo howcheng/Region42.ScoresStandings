@@ -54,7 +54,7 @@ public class TeamsController : Controller
 			teams = await _teamService.GetTeamsBySeasonAsync(currentSeason.Id);
 		}
 
-		return View(teams);
+		return View(teams.OrderBy(x => x.Name));
 	}
 
 	// GET: Teams/Create
@@ -69,6 +69,7 @@ public class TeamsController : Controller
 	[ValidateAntiForgeryToken]
 	public async Task<IActionResult> Create(Team team)
 	{
+		ModelState.Remove(nameof(Team.Division));
 		if (ModelState.IsValid)
 		{
 			// Validate team name uniqueness
@@ -83,7 +84,7 @@ public class TeamsController : Controller
 			{
 				await _teamService.CreateTeamAsync(team);
 				TempData["SuccessMessage"] = $"Team '{team.Name}' created successfully.";
-				return RedirectToAction(nameof(Index));
+				return RedirectToAction(nameof(Index), new { divisionId = team.DivisionId });
 			}
 			catch (Exception ex)
 			{
@@ -118,6 +119,7 @@ public class TeamsController : Controller
 			return BadRequest();
 		}
 
+		ModelState.Remove(nameof(Team.Division)); // not nullable, so remove it from validation
 		if (ModelState.IsValid)
 		{
 			// Validate team name uniqueness (excluding current team)
@@ -132,7 +134,7 @@ public class TeamsController : Controller
 			{
 				await _teamService.UpdateTeamAsync(team);
 				TempData["SuccessMessage"] = $"Team '{team.Name}' updated successfully.";
-				return RedirectToAction(nameof(Index));
+				return RedirectToAction(nameof(Index), new { divisionId = team.DivisionId });
 			}
 			catch (Exception ex)
 			{
@@ -171,7 +173,7 @@ public class TeamsController : Controller
 
 			await _teamService.DeactivateTeamAsync(id);
 			TempData["SuccessMessage"] = $"Team '{team.Name}' deactivated successfully.";
-			return RedirectToAction(nameof(Index));
+			return RedirectToAction(nameof(Index), new { divisionId = team.DivisionId });
 		}
 		catch (InvalidOperationException ex)
 		{

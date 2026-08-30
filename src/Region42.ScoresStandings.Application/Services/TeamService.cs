@@ -91,7 +91,7 @@ public class TeamService : ITeamService
 		if (existingTeam == null)
 		{
 			_logger.LogWarning("Team {TeamId} not found", team.Id);
-			throw new ArgumentException($"Team with ID {team.Id} not found.", nameof(team.Id));
+			throw new ArgumentException($"Team with ID {team.Id} not found.", nameof(team));
 		}
 
 		// Validate division exists
@@ -99,7 +99,7 @@ public class TeamService : ITeamService
 		if (division == null)
 		{
 			_logger.LogWarning("Division {DivisionId} not found", team.DivisionId);
-			throw new ArgumentException($"Division with ID {team.DivisionId} does not exist.", nameof(team.DivisionId));
+			throw new ArgumentException($"Division with ID {team.DivisionId} does not exist.", nameof(team));
 		}
 
 		// Validate team name uniqueness (excluding current team)
@@ -109,11 +109,18 @@ public class TeamService : ITeamService
 			throw new InvalidOperationException($"Team name '{team.Name}' already exists in this division.");
 		}
 
-		_teamRepository.Update(team);
+		existingTeam.Name = team.Name;
+		existingTeam.ShortName = team.ShortName;
+		existingTeam.DivisionId = team.DivisionId;
+		existingTeam.ContactName = team.ContactName;
+		existingTeam.IsActive = team.IsActive;
+		existingTeam.IsRegion42Team = team.IsRegion42Team;
+
+		_teamRepository.Update(existingTeam);
 		await _teamRepository.SaveChangesAsync();
 
-		_logger.LogInformation("Team {TeamId} updated successfully", team.Id);
-		return team;
+		_logger.LogInformation("Team {TeamId} updated successfully", existingTeam.Id);
+		return existingTeam;
 	}
 
 	public async Task DeactivateTeamAsync(int teamId)

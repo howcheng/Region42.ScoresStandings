@@ -20,10 +20,12 @@ public class DivisionsController : Controller
 	}
 
 	// GET: Divisions
-	public async Task<IActionResult> Index()
+	public async Task<IActionResult> Index(int? seasonId)
 	{
 		var seasons = await _seasonRepository.GetAllAsync();
-		var currentSeason = seasons.FirstOrDefault(s => s.IsActive);
+		var currentSeason = seasonId.HasValue
+			? seasons.FirstOrDefault(s => s.Id == seasonId.Value)
+			: seasons.FirstOrDefault(s => s.IsActive);
 
 		if (currentSeason == null)
 		{
@@ -63,6 +65,8 @@ public class DivisionsController : Controller
 			return BadRequest();
 		}
 
+		ModelState.Remove(nameof(Division.Season)); // not nullable, but not being updated here
+
 		if (division.ScrimmageRounds < 0 || division.ScrimmageRounds > division.TotalRounds)
 		{
 			ModelState.AddModelError(nameof(division.ScrimmageRounds), "Scrimmage rounds must be between 0 and the total number of rounds.");
@@ -87,7 +91,7 @@ public class DivisionsController : Controller
 				await _divisionRepository.SaveChangesAsync();
 
 				TempData["SuccessMessage"] = "Division updated successfully.";
-				return RedirectToAction(nameof(Index));
+				return RedirectToAction(nameof(Index), new { seasonId = existing.SeasonId });
 			}
 			catch (Exception ex)
 			{

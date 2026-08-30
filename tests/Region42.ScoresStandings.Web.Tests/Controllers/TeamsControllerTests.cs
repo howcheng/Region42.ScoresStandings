@@ -112,6 +112,7 @@ public class TeamsControllerTests
 		result.Should().BeOfType<RedirectToActionResult>();
 		var redirectResult = result as RedirectToActionResult;
 		redirectResult!.ActionName.Should().Be("Index");
+		redirectResult.RouteValues.Should().ContainKey("divisionId").WhoseValue.Should().Be(team.DivisionId);
 		_mockTeamService.Verify(s => s.CreateTeamAsync(It.IsAny<Team>()), Times.Once);
 	}
 
@@ -198,6 +199,7 @@ public class TeamsControllerTests
 		result.Should().BeOfType<RedirectToActionResult>();
 		var redirectResult = result as RedirectToActionResult;
 		redirectResult!.ActionName.Should().Be("Index");
+		redirectResult.RouteValues.Should().ContainKey("divisionId").WhoseValue.Should().Be(team.DivisionId);
 		_mockTeamService.Verify(s => s.DeactivateTeamAsync(team.Id), Times.Once);
 	}
 
