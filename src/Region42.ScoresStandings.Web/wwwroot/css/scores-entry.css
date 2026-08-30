@@ -78,3 +78,19 @@
 		flex: 1.5;
 	}
 }
+
+/* Dark mode overrides */
+html[data-bs-theme="dark"] .score-row {
+	border-color: #444;
+}
+
+html[data-bs-theme="dark"] .score-row:nth-of-type(even) {
+	background-color: rgba(255, 255, 255, .04);
+}
+
+@media (min-width: 768px) {
+	html[data-bs-theme="dark"] .score-row:hover {
+		background-color: rgba(255, 255, 255, .08);
+	}
+}
+

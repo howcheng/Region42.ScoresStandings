@@ -1,5 +1,8 @@
-﻿<!DOCTYPE html>
-<html lang="en">
+﻿@{
+    var currentTheme = Context.Request.Cookies["region42_theme"] == "dark" ? "dark" : "light";
+}
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="@currentTheme">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -62,14 +65,24 @@
                             <li class="nav-item">
                                 <a class="nav-link text-dark" asp-area="" asp-controller="Account" asp-action="Logout">Logout</a>
                             </li>
+                            <li class="nav-item d-flex align-items-center">
+                                <button type="button" id="theme-toggle" class="nav-link" title="Switch to dark mode" aria-label="Switch to dark mode">
+                                    <i class="bi bi-moon-fill" aria-hidden="true"></i>
+                                </button>
+                            </li>
                         </ul>
                     </div>
                 }
                 else
                 {
-                    <ul class="navbar-nav ms-auto">
+                    <ul class="navbar-nav ms-auto align-items-center">
                         <li class="nav-item">
                             <a class="nav-link text-dark" asp-area="" asp-controller="Account" asp-action="Login">Login</a>
+                        </li>
+                        <li class="nav-item d-flex align-items-center">
+                            <button type="button" id="theme-toggle" class="nav-link" title="Switch to dark mode" aria-label="Switch to dark mode">
+                                <i class="bi bi-moon-fill" aria-hidden="true"></i>
+                            </button>
                         </li>
                     </ul>
                 }

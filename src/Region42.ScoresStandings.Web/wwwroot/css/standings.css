@@ -34,3 +34,19 @@
 .list-group-item:hover {
 	background-color: #f8f9fa;
 }
+
+/* Dark mode overrides */
+html[data-bs-theme="dark"] #standingsTable thead th {
+	background-color: #2a2a2a;
+	color: #e0e0e0;
+}
+
+html[data-bs-theme="dark"] #standingsTable tbody tr.table-success {
+	background-color: #14532d !important;
+	color: #e0e0e0;
+}
+
+html[data-bs-theme="dark"] .list-group-item:hover {
+	background-color: #2a2a2a;
+}
+

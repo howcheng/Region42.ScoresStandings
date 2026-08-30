@@ -197,6 +197,9 @@ app.UseSecurityHeaders();
 
 app.UseRouting();
 
+// Refresh the theme preference cookie's expiration on each request (sliding expiration)
+app.UseThemeCookie();
+
 // Enable session middleware - MUST come before UseAuthentication/UseAuthorization
 app.UseSession();
 

@@ -46,3 +46,21 @@ button.accept-policy {
   white-space: nowrap;
   line-height: 60px;
 }
+
+/* Dark mode overrides */
+html[data-bs-theme="dark"] a {
+  color: #6ea8fe;
+}
+
+html[data-bs-theme="dark"] .border-top {
+  border-top-color: #333;
+}
+
+html[data-bs-theme="dark"] .border-bottom {
+  border-bottom-color: #333;
+}
+
+html[data-bs-theme="dark"] .box-shadow {
+  box-shadow: 0 .25rem .75rem rgba(0, 0, 0, .5);
+}
+
