@@ -1,4 +1,8 @@
 <Solution>
+  <Folder Name="/files/">
+    <File Path=".github/workflows/deploy.yml" />
+    <File Path="README.md" />
+  </Folder>
   <Folder Name="/src/">
     <Project Path="src/Region42.ScoresStandings.Application/Region42.ScoresStandings.Application.csproj" />
     <Project Path="src/Region42.ScoresStandings.Domain/Region42.ScoresStandings.Domain.csproj" />
