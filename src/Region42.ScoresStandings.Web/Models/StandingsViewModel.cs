@@ -56,4 +56,5 @@ public class GameScoreDisplay
 	public DateTime ScheduledDateTime { get; set; }
 	public string Location { get; set; } = string.Empty;
 	public int Round { get; set; }
+	public bool IsCancelled { get; set; }
 }

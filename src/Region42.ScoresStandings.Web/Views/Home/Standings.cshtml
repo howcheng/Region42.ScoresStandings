@@ -146,6 +146,10 @@
 														<strong>@score.AwayTeamName</strong>
 													</div>
 												</div>
+												@if (score.IsCancelled)
+												{
+													<small class="text-danger fw-bold d-block text-center mt-1">CANCELLED</small>
+												}
 												<small class="text-muted d-block mt-1">
 													@score.ScheduledDateTime.ToString("MMM dd, h:mm tt")
 													@if (!string.IsNullOrEmpty(score.Location))
