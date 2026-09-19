@@ -118,8 +118,7 @@ jobs:
           docker push "$LATEST_TAG"
 
       # --- DEPLOY TO GOOGLE CLOUD RUN ---
-      # Automatically mounts Secret Manager secrets to environment variables matching .NET configuration naming conventions.
-      # Sets up standard memory/CPU limits and links the PostgreSQL Cloud SQL proxy.
+      # Data is stored as JSON files in GCS (region42-storage). The service account needs Storage Object Admin on that bucket.
       - name: Deploy to Google Cloud Run
         uses: google-github-actions/deploy-cloudrun@v2
         with:
@@ -133,5 +132,5 @@ jobs:
             --memory=512Mi
             --cpu=1
             --service-account=region42-web-app@ayso-region-42.iam.gserviceaccount.com
-            --add-cloudsql-instances=${{ env.PROJECT_ID }}:us-west2:region-42-scores-standings
-            --set-secrets="ConnectionStrings__DefaultConnection=region42-db-connection-string:latest,Authentication__Google__ClientId=region42-google-oauth-client-id:latest,Authentication__Google__ClientSecret=region42-google-oauth-client-secret:latest"
+            --set-env-vars=Storage__Provider=Gcs,Storage__BucketName=region42-storage,Storage__CompetitionSlug=core-season
+            --set-secrets=Authentication__Google__ClientId=region42-google-oauth-client-id:latest,Authentication__Google__ClientSecret=region42-google-oauth-client-secret:latest

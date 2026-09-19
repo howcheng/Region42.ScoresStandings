@@ -5,7 +5,6 @@ using Region42.ScoresStandings.Application.Services;
 using Region42.ScoresStandings.Application.Tests.Helpers;
 using Region42.ScoresStandings.Domain.Entities;
 using Region42.ScoresStandings.Domain.Enums;
-using Region42.ScoresStandings.Domain.Interfaces;
 
 namespace Region42.ScoresStandings.Application.Tests.Services;
 
@@ -15,34 +14,15 @@ namespace Region42.ScoresStandings.Application.Tests.Services;
 /// </summary>
 public class StandingsServiceTests
 {
-	private readonly Mock<IRepository<Division>> _mockDivisionRepository;
-	private readonly Mock<IRepository<Team>> _mockTeamRepository;
-	private readonly Mock<IRepository<Game>> _mockGameRepository;
-	private readonly Mock<IRepository<Score>> _mockScoreRepository;
-	private readonly Mock<IRepository<VolunteerPoints>> _mockVolunteerPointsRepository;
-	private readonly Mock<IRepository<Settings>> _mockSettingsRepository;
+	private readonly TestCompetitionDataContext _context;
 	private readonly Mock<ILogger<StandingsService>> _mockLogger;
 	private readonly StandingsService _service;
 
 	public StandingsServiceTests()
 	{
-		_mockDivisionRepository = new Mock<IRepository<Division>>();
-		_mockTeamRepository = new Mock<IRepository<Team>>();
-		_mockGameRepository = new Mock<IRepository<Game>>();
-		_mockScoreRepository = new Mock<IRepository<Score>>();
-		_mockVolunteerPointsRepository = new Mock<IRepository<VolunteerPoints>>();
-		_mockSettingsRepository = new Mock<IRepository<Settings>>();
+		_context = new TestCompetitionDataContext();
 		_mockLogger = new Mock<ILogger<StandingsService>>();
-
-		_service = new StandingsService(
-			_mockDivisionRepository.Object,
-			_mockTeamRepository.Object,
-			_mockGameRepository.Object,
-			_mockScoreRepository.Object,
-			_mockVolunteerPointsRepository.Object,
-			_mockSettingsRepository.Object,
-			_mockLogger.Object
-		);
+		_service = new StandingsService(_context, _mockLogger.Object);
 	}
 
 	#region GetCurrentStandingsAsync Tests
@@ -50,15 +30,8 @@ public class StandingsServiceTests
 	[Fact]
 	public async Task GetCurrentStandingsAsync_WithInvalidDivisionId_ThrowsArgumentException()
 	{
-		// Arrange
-		_mockDivisionRepository
-			.Setup(r => r.GetByIdAsync(999))
-			.ReturnsAsync((Division?)null);
-
-		// Act
 		var act = async () => await _service.GetCurrentStandingsAsync(999);
 
-		// Assert
 		await act.Should().ThrowAsync<ArgumentException>()
 			.WithMessage("*Division*999*not found*");
 	}
@@ -66,18 +39,9 @@ public class StandingsServiceTests
 	[Fact]
 	public async Task GetCurrentStandingsAsync_WithNoTeams_ReturnsEmptyStandings()
 	{
-		// Arrange
 		var division = TestDataBuilder.CreateDivision(id: 1, seasonId: 1);
+		SetupBasicMocks(division, new List<Team>(), new List<Game>(), new List<Score>(), new List<VolunteerPoints>());
 
-		_mockDivisionRepository
-			.Setup(r => r.GetByIdAsync(1))
-			.ReturnsAsync(division);
-
-		_mockTeamRepository
-			.Setup(r => r.FindAsync(It.IsAny<System.Linq.Expressions.Expression<Func<Team, bool>>>()))
-			.ReturnsAsync(new List<Team>());
-
-		// Act
 		var result = await _service.GetCurrentStandingsAsync(1);
 
 		// Assert
@@ -450,10 +414,7 @@ public class StandingsServiceTests
 	{
 		// Arrange
 		var division = TestDataBuilder.CreateDivision(id: 1, totalRounds: 10);
-
-		_mockDivisionRepository
-			.Setup(r => r.GetByIdAsync(1))
-			.ReturnsAsync(division);
+		SetupBasicMocks(division, new List<Team>(), new List<Game>(), new List<Score>(), new List<VolunteerPoints>());
 
 		// Act
 		var actNegative = async () => await _service.GetStandingsByRoundAsync(1, throughRound: -1);
@@ -523,34 +484,20 @@ public class StandingsServiceTests
 		// Arrange
 		var division1 = TestDataBuilder.CreateDivision(id: 1, seasonId: 1, ageGroup: AgeGroup.U10, gender: Gender.Boys);
 		var division2 = TestDataBuilder.CreateDivision(id: 2, seasonId: 1, ageGroup: AgeGroup.U12, gender: Gender.Girls);
+		var teams = new List<Team>
+		{
+			TestDataBuilder.CreateTeam(id: 1, divisionId: 1, name: "10UB01"),
+			TestDataBuilder.CreateTeam(id: 2, divisionId: 2, name: "12UG01")
+		};
 
-		_mockDivisionRepository
-			.Setup(r => r.FindAsync(It.IsAny<System.Linq.Expressions.Expression<Func<Division, bool>>>()))
-			.ReturnsAsync(new List<Division> { division1, division2 });
-
-		// Setup for division 1
-		_mockDivisionRepository.Setup(r => r.GetByIdAsync(1)).ReturnsAsync(division1);
-		_mockTeamRepository
-			.Setup(r => r.FindAsync(It.IsAny<System.Linq.Expressions.Expression<Func<Team, bool>>>()))
-			.ReturnsAsync((System.Linq.Expressions.Expression<Func<Team, bool>> predicate) =>
-			{
-				var teams = new List<Team>
-				{
-					TestDataBuilder.CreateTeam(id: 1, divisionId: 1, name: "10UB01"),
-					TestDataBuilder.CreateTeam(id: 2, divisionId: 2, name: "12UG01")
-				};
-				return teams.Where(predicate.Compile()).ToList();
-			});
-
-		_mockGameRepository
-			.Setup(r => r.FindAsync(It.IsAny<System.Linq.Expressions.Expression<Func<Game, bool>>>()))
-			.ReturnsAsync(new List<Game>());
-
-		_mockScoreRepository.Setup(r => r.GetAllAsync()).ReturnsAsync(new List<Score>());
-		_mockVolunteerPointsRepository.Setup(r => r.GetAllAsync()).ReturnsAsync(new List<VolunteerPoints>());
-
-		// Setup for division 2
-		_mockDivisionRepository.Setup(r => r.GetByIdAsync(2)).ReturnsAsync(division2);
+		_context.Divisions.Clear();
+		_context.Teams.Clear();
+		_context.Games.Clear();
+		_context.Scores.Clear();
+		_context.VolunteerPoints.Clear();
+		_context.Divisions.Add(division1);
+		_context.Divisions.Add(division2);
+		_context.Teams.AddRange(teams);
 
 		// Act
 		var results = (await _service.GetStandingsBySeasonAsync(1)).ToList();
@@ -570,28 +517,25 @@ public class StandingsServiceTests
 		List<Team> teams,
 		List<Game> games,
 		List<Score> scores,
-		List<VolunteerPoints> volunteerPoints)
+		List<VolunteerPoints> volunteerPoints,
+		Settings? settings = null)
 	{
-		_mockDivisionRepository
-			.Setup(r => r.GetByIdAsync(division.Id))
-			.ReturnsAsync(division);
+		_context.Divisions.Clear();
+		_context.Teams.Clear();
+		_context.Games.Clear();
+		_context.Scores.Clear();
+		_context.VolunteerPoints.Clear();
 
-		_mockTeamRepository
-			.Setup(r => r.FindAsync(It.IsAny<System.Linq.Expressions.Expression<Func<Team, bool>>>()))
-			.ReturnsAsync(teams);
+		_context.Divisions.Add(division);
+		_context.Teams.AddRange(teams);
+		_context.Games.AddRange(games);
+		_context.Scores.AddRange(scores);
+		_context.VolunteerPoints.AddRange(volunteerPoints);
 
-		_mockGameRepository
-			.Setup(r => r.FindAsync(It.IsAny<System.Linq.Expressions.Expression<Func<Game, bool>>>()))
-			.ReturnsAsync((System.Linq.Expressions.Expression<Func<Game, bool>> predicate) =>
-				games.Where(predicate.Compile()).ToList());
-
-		_mockScoreRepository
-			.Setup(r => r.GetAllAsync())
-			.ReturnsAsync(scores);
-
-		_mockVolunteerPointsRepository
-			.Setup(r => r.GetAllAsync())
-			.ReturnsAsync(volunteerPoints);
+		if (settings != null)
+		{
+			_context.Settings = settings;
+		}
 	}
 
 	#endregion
@@ -650,35 +594,10 @@ public class StandingsServiceTests
 			DefaultPlayoffSpots = 1
 		};
 
-		_mockDivisionRepository
-			.Setup(r => r.GetByIdAsync(division.Id))
-			.ReturnsAsync(division);
+		SetupBasicMocks(division, teams, allGames, allScores, allVp, settings);
 
-		_mockTeamRepository
-			.Setup(r => r.FindAsync(It.IsAny<System.Linq.Expressions.Expression<Func<Team, bool>>>()))
-			.ReturnsAsync(teams);
-
-		_mockGameRepository
-			.Setup(r => r.FindAsync(It.IsAny<System.Linq.Expressions.Expression<Func<Game, bool>>>()))
-			.ReturnsAsync((System.Linq.Expressions.Expression<Func<Game, bool>> predicate) =>
-				allGames.Where(predicate.Compile()).ToList());
-
-		_mockScoreRepository
-			.Setup(r => r.GetAllAsync())
-			.ReturnsAsync(allScores);
-
-		_mockVolunteerPointsRepository
-			.Setup(r => r.GetAllAsync())
-			.ReturnsAsync(allVp);
-
-		_mockSettingsRepository
-			.Setup(r => r.GetAllAsync())
-			.ReturnsAsync(new List<Settings> { settings });
-
-		// Act
 		var result = await _service.GetCurrentStandingsAsync(division.Id);
 
-		// Assert
 		result.Should().NotBeNull();
 		result.Standings.Should().HaveCount(3);
 
@@ -729,35 +648,10 @@ public class StandingsServiceTests
 			DefaultPlayoffSpots = 1
 		};
 
-		_mockDivisionRepository
-			.Setup(r => r.GetByIdAsync(division.Id))
-			.ReturnsAsync(division);
+		SetupBasicMocks(division, teams, allGames, allScores, allVp, settings);
 
-		_mockTeamRepository
-			.Setup(r => r.FindAsync(It.IsAny<System.Linq.Expressions.Expression<Func<Team, bool>>>()))
-			.ReturnsAsync(teams);
-
-		_mockGameRepository
-			.Setup(r => r.FindAsync(It.IsAny<System.Linq.Expressions.Expression<Func<Game, bool>>>()))
-			.ReturnsAsync((System.Linq.Expressions.Expression<Func<Game, bool>> predicate) =>
-				allGames.Where(predicate.Compile()).ToList());
-
-		_mockScoreRepository
-			.Setup(r => r.GetAllAsync())
-			.ReturnsAsync(allScores);
-
-		_mockVolunteerPointsRepository
-			.Setup(r => r.GetAllAsync())
-			.ReturnsAsync(allVp);
-
-		_mockSettingsRepository
-			.Setup(r => r.GetAllAsync())
-			.ReturnsAsync(new List<Settings> { settings });
-
-		// Act
 		var result = await _service.GetCurrentStandingsAsync(division.Id);
 
-		// Assert
 		var team2Standing = result.Standings.First(s => s.TeamId == team2.Id);
 		team2Standing.QualifiesForPlayoffs.Should().BeFalse();
 		team2Standing.PlayoffQualificationNote.Should().Be("Needs 2 more volunteer points to qualify");
@@ -797,35 +691,10 @@ public class StandingsServiceTests
 			DefaultPlayoffSpots = 1
 		};
 
-		_mockDivisionRepository
-			.Setup(r => r.GetByIdAsync(division.Id))
-			.ReturnsAsync(division);
+		SetupBasicMocks(division, teams, allGames, allScores, allVp, settings);
 
-		_mockTeamRepository
-			.Setup(r => r.FindAsync(It.IsAny<System.Linq.Expressions.Expression<Func<Team, bool>>>()))
-			.ReturnsAsync(teams);
-
-		_mockGameRepository
-			.Setup(r => r.FindAsync(It.IsAny<System.Linq.Expressions.Expression<Func<Game, bool>>>()))
-			.ReturnsAsync((System.Linq.Expressions.Expression<Func<Game, bool>> predicate) =>
-				allGames.Where(predicate.Compile()).ToList());
-
-		_mockScoreRepository
-			.Setup(r => r.GetAllAsync())
-			.ReturnsAsync(allScores);
-
-		_mockVolunteerPointsRepository
-			.Setup(r => r.GetAllAsync())
-			.ReturnsAsync(allVp);
-
-		_mockSettingsRepository
-			.Setup(r => r.GetAllAsync())
-			.ReturnsAsync(new List<Settings> { settings });
-
-		// Act
 		var result = await _service.GetCurrentStandingsAsync(division.Id);
 
-		// Assert
 		var team2Standing = result.Standings.First(s => s.TeamId == team2.Id);
 		team2Standing.QualifiesForPlayoffs.Should().BeFalse();
 		team2Standing.PlayoffQualificationNote.Should().Be("Eliminated from playoffs");

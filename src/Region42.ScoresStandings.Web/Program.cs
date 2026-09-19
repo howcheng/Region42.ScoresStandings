@@ -1,17 +1,16 @@
-using Microsoft.EntityFrameworkCore;
+using Google.Cloud.Storage.V1;
 using Microsoft.AspNetCore.HttpOverrides;
-using Npgsql;
 using Region42.ScoresStandings.Application.Interfaces;
 using Region42.ScoresStandings.Application.Services;
 using Region42.ScoresStandings.Domain.Interfaces;
-using Region42.ScoresStandings.Web.Data;
 using Region42.ScoresStandings.Web.Authorization;
+using Region42.ScoresStandings.Web.Data;
 using Region42.ScoresStandings.Web.Middleware;
+using Region42.ScoresStandings.Web.Storage;
 using Microsoft.AspNetCore.Authorization;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
 var mvcBuilder = builder.Services.AddControllersWithViews();
 
 // Configure forwarded headers to handle HTTPS redirection on Google Cloud Run hosting
@@ -35,14 +34,13 @@ builder.Services.AddSession(options =>
 {
 	options.IdleTimeout = TimeSpan.FromMinutes(30);
 	options.Cookie.HttpOnly = true;
-	options.Cookie.IsEssential = true; // Make session cookie essential for GDPR
+	options.Cookie.IsEssential = true;
 });
 
 // Configure TempData to use session storage instead of cookies
 builder.Services.AddSingleton<Microsoft.AspNetCore.Mvc.ViewFeatures.ITempDataProvider,
 	Microsoft.AspNetCore.Mvc.ViewFeatures.SessionStateTempDataProvider>();
 
-// Register IHttpContextAccessor for audit tracking
 builder.Services.AddHttpContextAccessor();
 
 // Configure HSTS to use OWASP recommended values (1 year, subdomains, and preload)
@@ -50,70 +48,37 @@ builder.Services.AddHsts(options =>
 {
 	options.Preload = true;
 	options.IncludeSubDomains = true;
-	options.MaxAge = TimeSpan.FromDays(365); // 1 year (OWASP recommendation)
+	options.MaxAge = TimeSpan.FromDays(365);
 });
 
-// Register DbContext with connection string from configuration/user secrets
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
-	?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
+builder.Services.Configure<StorageOptions>(builder.Configuration.GetSection(StorageOptions.SectionName));
+var storageOptions = builder.Configuration.GetSection(StorageOptions.SectionName).Get<StorageOptions>() ?? new StorageOptions();
 
-if (connectionString.Contains("IamAuth=true", StringComparison.OrdinalIgnoreCase))
+if (string.Equals(storageOptions.Provider, "Gcs", StringComparison.OrdinalIgnoreCase))
 {
-	// Strip "IamAuth=true" (and its separating semicolon) so Npgsql doesn't throw a parsing exception
-	var cleanConnectionString = connectionString
-		.Replace(";IamAuth=true", "", StringComparison.OrdinalIgnoreCase)
-		.Replace("IamAuth=true;", "", StringComparison.OrdinalIgnoreCase)
-		.Replace("IamAuth=true", "", StringComparison.OrdinalIgnoreCase);
-
-	var dataSourceBuilder = new NpgsqlDataSourceBuilder(cleanConnectionString);
-
-	// Register periodic password provider to fetch GCP IAM OAuth2 access tokens
-	dataSourceBuilder.UsePeriodicPasswordProvider(async (connectionSettings, cancellationToken) =>
-	{
-		using var client = new HttpClient();
-		client.DefaultRequestHeaders.Add("Metadata-Flavor", "Google");
-
-		// Query Google Metadata Server for local service account OAuth2 identity token
-		var response = await client.GetAsync("http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token", cancellationToken);
-		response.EnsureSuccessStatusCode();
-
-		var tokenInfo = await response.Content.ReadFromJsonAsync<MetadataTokenResponse>(cancellationToken);
-		return tokenInfo?.access_token ?? throw new InvalidOperationException("Failed to retrieve IAM token from GCP metadata server.");
-	}, TimeSpan.FromMinutes(45), TimeSpan.FromSeconds(10));
-
-	var dataSource = dataSourceBuilder.Build();
-
-	builder.Services.AddDbContext<Region42DbContext>(options =>
-		options.UseNpgsql(dataSource));
+	builder.Services.AddSingleton(StorageClient.Create());
+	builder.Services.AddSingleton<ICompetitionDataStore, GcsCompetitionDataStore>();
 }
 else
 {
-	builder.Services.AddDbContext<Region42DbContext>(options =>
-		options.UseNpgsql(connectionString));
+	builder.Services.AddSingleton<ICompetitionDataStore, LocalFileCompetitionDataStore>();
 }
 
-// Register IRegion42DbContext interface for dependency injection
-builder.Services.AddScoped<IRegion42DbContext>(provider =>
-	provider.GetRequiredService<Region42DbContext>());
-
-// Register generic repository using open generics
+builder.Services.AddScoped<CompetitionDataContext>();
+builder.Services.AddScoped<ICompetitionDataContext>(sp => sp.GetRequiredService<CompetitionDataContext>());
+builder.Services.AddScoped<IRegion42DbContext>(sp => sp.GetRequiredService<CompetitionDataContext>());
 builder.Services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
 
-// Register application services
 builder.Services.AddScoped<ISeasonService, SeasonService>();
 builder.Services.AddScoped<ITeamService, TeamService>();
 builder.Services.AddScoped<IGameService, GameService>();
 builder.Services.AddScoped<IScoreService, ScoreService>();
 builder.Services.AddScoped<IVolunteerPointsService, VolunteerPointsService>();
 builder.Services.AddScoped<IStandingsService, StandingsService>();
+builder.Services.AddScoped<IStandingsRefreshService, StandingsRefreshService>();
 builder.Services.AddScoped<ICsvImportService, CsvImportService>();
+builder.Services.AddScoped<PostgresToJsonExporter>();
 
-// Configure Google OAuth Authentication
-// Security model: Two-layer approach
-// 1. Domain restriction: Configure in Google Cloud Console OAuth consent screen
-//    to only allow @aysoregion42.org
-// 2. User whitelist: Check authenticated user against User table (future implementation)
-//    See plan documentation for details
 builder.Services.AddAuthentication(options =>
 {
 	options.DefaultScheme = "Cookies";
@@ -126,13 +91,10 @@ builder.Services.AddAuthentication(options =>
 		?? throw new InvalidOperationException("Google ClientId not found in configuration.");
 	options.ClientSecret = builder.Configuration["Authentication:Google:ClientSecret"]
 		?? throw new InvalidOperationException("Google ClientSecret not found in configuration.");
-
-	// Request email scope to get user's email address
 	options.Scope.Add("email");
 	options.SaveTokens = true;
 });
 
-// Add authorization with domain-restricted AdminPolicy
 builder.Services.AddAuthorizationBuilder()
 	.AddPolicy("AdminPolicy", policy =>
 	{
@@ -144,65 +106,27 @@ builder.Services.AddSingleton<IAuthorizationHandler, DomainRequirementHandler>()
 
 var app = builder.Build();
 
-// Enable Forwarded Headers first in the request pipeline to recognize secure requests terminated at Cloud Run
-app.UseForwardedHeaders();
-
-// Apply pending migrations automatically in Development environment only
-// Production migrations should be applied via deployment pipeline
-if (app.Environment.IsDevelopment())
+if (args.Contains("--export-from-postgres", StringComparer.OrdinalIgnoreCase))
 {
-	using (var scope = app.Services.CreateScope())
-	{
-		var dbContext = scope.ServiceProvider.GetRequiredService<Region42DbContext>();
-		var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
-
-		try
-		{
-			var pendingMigrations = await dbContext.Database.GetPendingMigrationsAsync();
-			if (pendingMigrations.Any())
-			{
-				logger.LogInformation("Applying {Count} pending migration(s): {Migrations}",
-					pendingMigrations.Count(),
-					string.Join(", ", pendingMigrations));
-
-				await dbContext.Database.MigrateAsync();
-
-				logger.LogInformation("Database migrations applied successfully");
-			}
-			else
-			{
-				logger.LogInformation("Database is up to date, no pending migrations");
-			}
-		}
-		catch (Exception ex)
-		{
-			logger.LogError(ex, "An error occurred while migrating the database");
-			throw; // Fail fast in development
-		}
-	}
+	using var scope = app.Services.CreateScope();
+	var exporter = scope.ServiceProvider.GetRequiredService<PostgresToJsonExporter>();
+	await exporter.ExportAsync();
+	return;
 }
 
-// Configure the HTTP request pipeline.
+app.UseForwardedHeaders();
+
 if (!app.Environment.IsDevelopment())
 {
 	app.UseExceptionHandler("/Home/Error");
-	// The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
 	app.UseHsts();
 }
 
 app.UseHttpsRedirection();
-
-// Add OWASP recommended security headers and Content Security Policy headers
 app.UseSecurityHeaders();
-
 app.UseRouting();
-
-// Refresh the theme preference cookie's expiration on each request (sliding expiration)
 app.UseThemeCookie();
-
-// Enable session middleware - MUST come before UseAuthentication/UseAuthorization
 app.UseSession();
-
 app.UseAuthentication();
 app.UseAuthorization();
 
@@ -213,12 +137,4 @@ app.MapControllerRoute(
 	pattern: "{controller=Home}/{action=Index}/{id?}")
 	.WithStaticAssets();
 
-
 app.Run();
-
-public class MetadataTokenResponse
-{
-	public string access_token { get; set; } = "";
-	public int expires_in { get; set; }
-	public string token_type { get; set; } = "";
-}

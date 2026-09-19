@@ -13,15 +13,18 @@ public class VolunteerPointsService : IVolunteerPointsService
 {
 	private readonly IRepository<VolunteerPoints> _volunteerPointsRepository;
 	private readonly IRepository<Team> _teamRepository;
+	private readonly IStandingsRefreshService _standingsRefreshService;
 	private readonly ILogger<VolunteerPointsService> _logger;
 
 	public VolunteerPointsService(
 		IRepository<VolunteerPoints> volunteerPointsRepository,
 		IRepository<Team> teamRepository,
+		IStandingsRefreshService standingsRefreshService,
 		ILogger<VolunteerPointsService> logger)
 	{
 		_volunteerPointsRepository = volunteerPointsRepository;
 		_teamRepository = teamRepository;
+		_standingsRefreshService = standingsRefreshService;
 		_logger = logger;
 	}
 
@@ -113,12 +116,11 @@ public class VolunteerPointsService : IVolunteerPointsService
 			existing.Notes = notes;
 
 			_volunteerPointsRepository.Update(existing);
-			await _volunteerPointsRepository.SaveChangesAsync();
+			await RefreshStandingsAndSaveAsync(team.DivisionId);
 			return existing;
 		}
 		else
 		{
-			// Create new entry
 			var newPoints = new VolunteerPoints
 			{
 				TeamId = teamId,
@@ -128,11 +130,17 @@ public class VolunteerPointsService : IVolunteerPointsService
 			};
 
 			await _volunteerPointsRepository.AddAsync(newPoints);
-			await _volunteerPointsRepository.SaveChangesAsync();
+			await RefreshStandingsAndSaveAsync(team.DivisionId);
 
 			_logger.LogInformation("Created volunteer points entry for team {TeamId}, round {Round}", teamId, round);
 			return newPoints;
 		}
+	}
+
+	private async Task RefreshStandingsAndSaveAsync(int divisionId)
+	{
+		await _standingsRefreshService.RefreshDivisionStandingsAsync(divisionId);
+		await _volunteerPointsRepository.SaveChangesAsync();
 	}
 
 	public async Task<bool> DeleteVolunteerPointsAsync(int volunteerPointsId)
@@ -147,8 +155,16 @@ public class VolunteerPointsService : IVolunteerPointsService
 			return false;
 		}
 
+		var team = await _teamRepository.GetByIdAsync(points.TeamId);
 		_volunteerPointsRepository.Delete(points);
-		await _volunteerPointsRepository.SaveChangesAsync();
+		if (team != null)
+		{
+			await RefreshStandingsAndSaveAsync(team.DivisionId);
+		}
+		else
+		{
+			await _volunteerPointsRepository.SaveChangesAsync();
+		}
 
 		_logger.LogInformation("Successfully deleted volunteer points {VolunteerPointsId}", volunteerPointsId);
 		return true;

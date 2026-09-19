@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Moq;
+using Region42.ScoresStandings.Application.Interfaces;
 using Region42.ScoresStandings.Application.Services;
 using Region42.ScoresStandings.Domain.Entities;
 using Region42.ScoresStandings.Domain.Enums;
@@ -14,6 +15,7 @@ public class ScoreServiceTests
 {
 	private readonly Mock<IRepository<Score>> _mockScoreRepository;
 	private readonly Mock<IRepository<Game>> _mockGameRepository;
+	private readonly Mock<IStandingsRefreshService> _mockStandingsRefreshService;
 	private readonly Mock<ILogger<ScoreService>> _mockLogger;
 	private readonly ScoreService _scoreService;
 
@@ -21,8 +23,16 @@ public class ScoreServiceTests
 	{
 		_mockScoreRepository = new Mock<IRepository<Score>>();
 		_mockGameRepository = new Mock<IRepository<Game>>();
+		_mockStandingsRefreshService = new Mock<IStandingsRefreshService>();
 		_mockLogger = new Mock<ILogger<ScoreService>>();
-		_scoreService = new ScoreService(_mockScoreRepository.Object, _mockGameRepository.Object, _mockLogger.Object);
+		_mockStandingsRefreshService
+			.Setup(s => s.RefreshDivisionStandingsAsync(It.IsAny<int>()))
+			.Returns(Task.CompletedTask);
+		_scoreService = new ScoreService(
+			_mockScoreRepository.Object,
+			_mockGameRepository.Object,
+			_mockStandingsRefreshService.Object,
+			_mockLogger.Object);
 	}
 
 	#region GetScoreByGameIdAsync Tests
@@ -117,7 +127,8 @@ public class ScoreServiceTests
 		_mockScoreRepository.Verify(r => r.SaveChangesAsync(), Times.Once);
 		_mockScoreRepository.Verify(r => r.Update(It.IsAny<Score>()), Times.Never);
 		_mockGameRepository.Verify(r => r.Update(It.IsAny<Game>()), Times.Once);
-		_mockGameRepository.Verify(r => r.SaveChangesAsync(), Times.Once);
+		_mockGameRepository.Verify(r => r.SaveChangesAsync(), Times.Never);
+		_mockStandingsRefreshService.Verify(r => r.RefreshDivisionStandingsAsync(It.IsAny<int>()), Times.Once);
 	}
 
 	[Fact]
@@ -475,7 +486,8 @@ public class ScoreServiceTests
 		_mockScoreRepository.Verify(r => r.Delete(score), Times.Once);
 		_mockScoreRepository.Verify(r => r.SaveChangesAsync(), Times.Once);
 		_mockGameRepository.Verify(r => r.Update(It.IsAny<Game>()), Times.Once);
-		_mockGameRepository.Verify(r => r.SaveChangesAsync(), Times.Once);
+		_mockGameRepository.Verify(r => r.SaveChangesAsync(), Times.Never);
+		_mockStandingsRefreshService.Verify(r => r.RefreshDivisionStandingsAsync(It.IsAny<int>()), Times.Once);
 	}
 
 	[Fact]
