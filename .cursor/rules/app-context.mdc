@@ -1,0 +1,29 @@
+---
+description: Overview of this application
+alwaysApply: true
+---
+# Overview
+This is a web application to keep track of scores and standings for a youth soccer league run by AYSO Region 42, located in Newbury Park, California. There is only one season per year, which runs in the autumn, typically starting the second week of September, and continuing for 10 weeks. The start date may change when the Labor Day holiday comes a bit later in the month (for example, in 2026, Labor Day was September 7, so the season started on the last weekend of August instead).
+
+See the `README.md` file in the solution root. It also has links to other documentation files to describe the various features of the site and their business rules, which you can pull in as additional context as needed.
+
+## Age divisions
+This application covers the following age divisions:
+- 10U (or U10)
+- 12U (or U12)
+- 14U (or U14)
+All three are further split by gender, so there are two 10U teams: 10U Boys and 10U Girls. These may be shortened to "10UB" and "10UG".
+
+## Team names
+Team names generally follow this naming convention: division + team number, followed by a "fun name" and the coach's last name. The team numbers include the leading 0 so that they can sort properly. The fun names may not necessarily be included. Examples:
+- 10UB01 Sharks (Smith)
+- 12UG10 Mermaids (Garcia)
+- 14UB03 (Chang)
+
+In addition, due to low numbers, teams from other regions may be included in the scorekeeping, but not in the standings. These have a different naming convention: R + region number + team letter, and then the fun name and coach's name. Examples:
+- R121A Bulls (Subramanian)
+- R9B (Hilton)
+
+## Process flow
+- Before the season begins, data is loaded via CSV file import, which creates the season and the teams.
+- Each week, admins enter scores and volunteer points. Each team's rank in the standings table is determined by a combination of game points and volunteer points
