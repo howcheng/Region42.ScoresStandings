@@ -656,7 +656,8 @@ public class HomeControllerTests
 							DivisionId = division.Id,
 							DivisionName = "10U Boys",
 							ThroughRound = 1,
-							Standings = new List<TeamStanding>()
+							Standings = new List<TeamStanding>(),
+							CalculatedAt = DateTime.UtcNow
 						};
 
 						_mockSeasonRepo.Setup(r => r.GetAllAsync())
