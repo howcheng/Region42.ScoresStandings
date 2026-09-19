@@ -246,6 +246,56 @@ public class ScoresControllerTests
 	}
 
 	[Fact]
+	public async Task Entry_Post_WithClearedScores_DeletesExistingScore()
+	{
+		// Arrange - score was entered for the wrong game; user blanks both scores and sets status back to Scheduled
+		var game = _builder.BuildGame(1, 1, 2, 1);
+		game.Id = 1;
+		game.Status = GameStatus.Completed;
+		game.Score = new Score
+		{
+			GameId = game.Id,
+			HomeScore = 3,
+			AwayScore = 1
+		};
+
+		var scores = new List<ScoreUpdateDto>
+		{
+			new ScoreUpdateDto
+			{
+				GameId = 1,
+				HomeTeamId = 1,
+				AwayTeamId = 2,
+				HomeScore = null,
+				AwayScore = null,
+				Status = GameStatus.Scheduled
+			}
+		};
+
+		_mockGameService.Setup(s => s.GetGameByIdAsync(1))
+			.ReturnsAsync(game);
+		_mockGameService.Setup(s => s.GetGamesByDivisionAndRoundAsync(1, 1))
+			.ReturnsAsync(new List<Game> { game });
+		_mockGameService.Setup(s => s.UpdateGameAsync(It.IsAny<Game>()))
+			.ReturnsAsync((Game updated) => updated);
+		_mockScoreService.Setup(s => s.DeleteScoreAsync(1))
+			.ReturnsAsync(true);
+
+		// Act
+		var result = await _controller.Entry(scores, 1, 1);
+
+		// Assert
+		result.Should().BeOfType<RedirectToActionResult>();
+		_controller.TempData["SuccessMessage"].Should().NotBeNull();
+		_controller.TempData["ErrorMessage"].Should().BeNull();
+		_mockScoreService.Verify(s => s.DeleteScoreAsync(1), Times.Once);
+		_mockScoreService.Verify(
+			s => s.EnterOrUpdateScoreAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<int>()),
+			Times.Never);
+		_mockGameService.Verify(s => s.UpdateGameAsync(It.Is<Game>(g => g.Status == GameStatus.Scheduled)), Times.Once);
+	}
+
+	[Fact]
 	public async Task Entry_Post_WithPartialScore_ReturnsError()
 	{
 		// Arrange - One game with only home score, another with only away score
