@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Moq;
+using Region42.ScoresStandings.Application.Interfaces;
 using Region42.ScoresStandings.Application.Services;
 using Region42.ScoresStandings.Domain.Entities;
 using Region42.ScoresStandings.Domain.Interfaces;
@@ -13,6 +14,7 @@ public class VolunteerPointsServiceTests
 {
 	private readonly Mock<IRepository<VolunteerPoints>> _mockVolunteerPointsRepository;
 	private readonly Mock<IRepository<Team>> _mockTeamRepository;
+	private readonly Mock<IStandingsRefreshService> _mockStandingsRefreshService;
 	private readonly Mock<ILogger<VolunteerPointsService>> _mockLogger;
 	private readonly VolunteerPointsService _volunteerPointsService;
 
@@ -20,10 +22,15 @@ public class VolunteerPointsServiceTests
 	{
 		_mockVolunteerPointsRepository = new Mock<IRepository<VolunteerPoints>>();
 		_mockTeamRepository = new Mock<IRepository<Team>>();
+		_mockStandingsRefreshService = new Mock<IStandingsRefreshService>();
 		_mockLogger = new Mock<ILogger<VolunteerPointsService>>();
+		_mockStandingsRefreshService
+			.Setup(s => s.RefreshDivisionStandingsAsync(It.IsAny<int>()))
+			.Returns(Task.CompletedTask);
 		_volunteerPointsService = new VolunteerPointsService(
 			_mockVolunteerPointsRepository.Object,
 			_mockTeamRepository.Object,
+			_mockStandingsRefreshService.Object,
 			_mockLogger.Object);
 	}
 

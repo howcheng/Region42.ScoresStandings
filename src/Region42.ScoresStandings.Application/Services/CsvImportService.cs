@@ -17,26 +17,29 @@ namespace Region42.ScoresStandings.Application.Services;
 /// </summary>
 public class CsvImportService : ICsvImportService
 {
-	private readonly IRegion42DbContext _dbContext;
+	private readonly ICompetitionDataContext _dataContext;
 	private readonly IRepository<Season> _seasonRepository;
 	private readonly IRepository<Division> _divisionRepository;
 	private readonly IRepository<Team> _teamRepository;
 	private readonly IRepository<Game> _gameRepository;
+	private readonly IStandingsRefreshService _standingsRefreshService;
 	private readonly ILogger<CsvImportService> _logger;
 
 	public CsvImportService(
-		IRegion42DbContext dbContext,
+		ICompetitionDataContext dataContext,
 		IRepository<Season> seasonRepository,
 		IRepository<Division> divisionRepository,
 		IRepository<Team> teamRepository,
 		IRepository<Game> gameRepository,
+		IStandingsRefreshService standingsRefreshService,
 		ILogger<CsvImportService> logger)
 	{
-		_dbContext = dbContext;
+		_dataContext = dataContext;
 		_seasonRepository = seasonRepository;
 		_divisionRepository = divisionRepository;
 		_teamRepository = teamRepository;
 		_gameRepository = gameRepository;
+		_standingsRefreshService = standingsRefreshService;
 		_logger = logger;
 	}
 
@@ -121,7 +124,7 @@ public class CsvImportService : ICsvImportService
 		}
 
 		// Use a database transaction to ensure atomicity (all-or-nothing)
-		await using var transaction = await _dbContext.BeginTransactionAsync();
+		await using var transaction = await _dataContext.BeginTransactionAsync();
 
 		try
 		{
@@ -187,10 +190,14 @@ public class CsvImportService : ICsvImportService
 
 			importResult.RowsSkipped = validationResult.SkippedRows;
 
-			// Save games
+			var divisionIds = divisionMap.Values.Select(d => d.Id).Distinct();
+			foreach (var divisionId in divisionIds)
+			{
+				await _standingsRefreshService.RefreshDivisionStandingsAsync(divisionId);
+			}
+
 			await _gameRepository.SaveChangesAsync();
 
-			// Commit transaction - all changes succeed together
 			await transaction.CommitAsync();
 
 			importResult.Success = true;

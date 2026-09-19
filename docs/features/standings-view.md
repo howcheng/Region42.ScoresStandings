@@ -32,7 +32,7 @@ When teams finish with identical total standing points, the engine resolves rank
 
 ## ⚖️ 3. Handling Odd Number of Teams (PPG Balancing)
 
-When a division contains an odd number of teams, at least one team sits out each week on a regular rotation (a "bye"). This creates a games-played discrepancy.
+When a division contains an odd number of teams, at least one team sits out each week on a regular rotation (a "bye"). This creates a games-played discrepancy. This may also happen when games are cancelled.
 
 *   **Points-Per-Game (PPG) Trigger:** If the engine detects that active teams in the division have completed an unequal number of games, it automatically calculates and exposes a `PointsPerGame` value for each team:
 	$$\text{Points Per Game (PPG)} = \frac{\text{Total Points}}{\text{Games Played}} \quad (\text{Rounded to 2 decimal places})$$
@@ -58,3 +58,10 @@ Depending on which gates are satisfied, the system appends precise status guidel
 | **Within Spots** ($\le$ Playoff Spots) | **Below Threshold** ($<$ Min Points) | `"Needs X more volunteer point(s) to qualify"` |
 | **Outside Spots** ($>$ Playoff Spots) | **Threshold Met** ($\ge$ Min Points) | `"Eliminated from playoffs"` |
 | **Outside Spots** ($>$ Playoff Spots) | **Below Threshold** ($<$ Min Points) | `"Needs X more volunteer point(s) and must improve standing"` |
+---
+
+## 5. End-of-season tournaments
+
+The 12U and 14U divisions have a single-elimination tournament among themselves, with seedings based on rank (note: code to display the tournament brackets has not yet been written). When teams in the division do not play an equal number of games, then we use an average of points per game + volunteer points to determine the rankings. Historically, we have also had a tournament in the 10U divisions, but currently not.
+
+In divisions with tournaments, when there is only one playoff spot available, the top team in the standings gets it. If we have more, then tournament winner gets the next spot, unless the top team wins the tournament, in which case it's the next (N - 1) eligible teams in the standings that qualify. Teams must also have a minimum number of volunteer points.

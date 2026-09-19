@@ -14,15 +14,18 @@ public class ScoreService : IScoreService
 {
 	private readonly IRepository<Score> _scoreRepository;
 	private readonly IRepository<Game> _gameRepository;
+	private readonly IStandingsRefreshService _standingsRefreshService;
 	private readonly ILogger<ScoreService> _logger;
 
 	public ScoreService(
 		IRepository<Score> scoreRepository,
 		IRepository<Game> gameRepository,
+		IStandingsRefreshService standingsRefreshService,
 		ILogger<ScoreService> logger)
 	{
 		_scoreRepository = scoreRepository;
 		_gameRepository = gameRepository;
+		_standingsRefreshService = standingsRefreshService;
 		_logger = logger;
 	}
 
@@ -73,11 +76,9 @@ public class ScoreService : IScoreService
 			existingScore.AwayScore = awayScore;
 
 			_scoreRepository.Update(existingScore);
-			await _scoreRepository.SaveChangesAsync();
 		}
 		else
 		{
-			// Create new score
 			var newScore = new Score
 			{
 				GameId = gameId,
@@ -86,7 +87,6 @@ public class ScoreService : IScoreService
 			};
 
 			await _scoreRepository.AddAsync(newScore);
-			await _scoreRepository.SaveChangesAsync();
 			_logger.LogInformation("Created new score for game {GameId}", gameId);
 			existingScore = newScore;
 		}
@@ -96,11 +96,20 @@ public class ScoreService : IScoreService
 		{
 			game.Status = GameStatus.Completed;
 			_gameRepository.Update(game);
-			await _gameRepository.SaveChangesAsync();
-			_logger.LogInformation("Game {GameId} status updated to Completed", gameId);
 		}
 
+		existingScore.Game = game;
+		game.Score = existingScore;
+		await RefreshStandingsAndSaveAsync(game.DivisionId);
+		_logger.LogInformation("Game {GameId} score saved and standings refreshed", gameId);
+
 		return existingScore;
+	}
+
+	private async Task RefreshStandingsAndSaveAsync(int divisionId)
+	{
+		await _standingsRefreshService.RefreshDivisionStandingsAsync(divisionId);
+		await _scoreRepository.SaveChangesAsync();
 	}
 
 	public async Task<IEnumerable<Score>> GetScoresByDivisionAsync(int divisionId)
@@ -160,20 +169,26 @@ public class ScoreService : IScoreService
 			return false;
 		}
 
-		_scoreRepository.Delete(score);
-		await _scoreRepository.SaveChangesAsync();
-		_logger.LogInformation("Successfully deleted score for game {GameId}", gameId);
-
-		// Revert game status back to Scheduled when score is deleted
 		var game = await _gameRepository.GetByIdAsync(gameId);
+		_scoreRepository.Delete(score);
+
 		if (game != null && game.Status == GameStatus.Completed)
 		{
 			game.Status = GameStatus.Scheduled;
+			game.Score = null;
 			_gameRepository.Update(game);
-			await _gameRepository.SaveChangesAsync();
-			_logger.LogInformation("Game {GameId} status reverted to Scheduled after score deletion", gameId);
 		}
 
+		if (game != null)
+		{
+			await RefreshStandingsAndSaveAsync(game.DivisionId);
+		}
+		else
+		{
+			await _scoreRepository.SaveChangesAsync();
+		}
+
+		_logger.LogInformation("Successfully deleted score for game {GameId}", gameId);
 		return true;
 	}
 }

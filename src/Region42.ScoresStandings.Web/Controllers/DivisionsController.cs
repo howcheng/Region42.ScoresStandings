@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Region42.ScoresStandings.Application.Interfaces;
 using Region42.ScoresStandings.Domain.Entities;
 using Region42.ScoresStandings.Domain.Interfaces;
 
@@ -10,13 +11,16 @@ public class DivisionsController : Controller
 {
 	private readonly IRepository<Division> _divisionRepository;
 	private readonly IRepository<Season> _seasonRepository;
+	private readonly IStandingsRefreshService _standingsRefreshService;
 
 	public DivisionsController(
 		IRepository<Division> divisionRepository,
-		IRepository<Season> seasonRepository)
+		IRepository<Season> seasonRepository,
+		IStandingsRefreshService standingsRefreshService)
 	{
 		_divisionRepository = divisionRepository;
 		_seasonRepository = seasonRepository;
+		_standingsRefreshService = standingsRefreshService;
 	}
 
 	// GET: Divisions
@@ -88,6 +92,7 @@ public class DivisionsController : Controller
 				existing.CustomMessage = division.CustomMessage;
 
 				_divisionRepository.Update(existing);
+				await _standingsRefreshService.RefreshDivisionStandingsAsync(existing.Id);
 				await _divisionRepository.SaveChangesAsync();
 
 				TempData["SuccessMessage"] = "Division updated successfully.";

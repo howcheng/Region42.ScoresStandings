@@ -2,6 +2,7 @@ using System.Text;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Moq;
+using Region42.ScoresStandings.Application.Interfaces;
 using Region42.ScoresStandings.Application.Services;
 using Region42.ScoresStandings.Domain.Entities;
 using Region42.ScoresStandings.Domain.Enums;
@@ -14,7 +15,8 @@ namespace Region42.ScoresStandings.Application.Tests.Services;
 /// </summary>
 public class CsvImportServiceTests
 {
-	private readonly Mock<IRegion42DbContext> _mockDbContext;
+	private readonly Mock<ICompetitionDataContext> _mockDataContext;
+	private readonly Mock<IStandingsRefreshService> _mockStandingsRefreshService;
 	private readonly Mock<IRepository<Season>> _mockSeasonRepository;
 	private readonly Mock<IRepository<Division>> _mockDivisionRepository;
 	private readonly Mock<IRepository<Team>> _mockTeamRepository;
@@ -24,19 +26,24 @@ public class CsvImportServiceTests
 
 	public CsvImportServiceTests()
 	{
-		_mockDbContext = new Mock<IRegion42DbContext>();
+		_mockDataContext = new Mock<ICompetitionDataContext>();
+		_mockStandingsRefreshService = new Mock<IStandingsRefreshService>();
 		_mockSeasonRepository = new Mock<IRepository<Season>>();
 		_mockDivisionRepository = new Mock<IRepository<Division>>();
 		_mockTeamRepository = new Mock<IRepository<Team>>();
 		_mockGameRepository = new Mock<IRepository<Game>>();
 		_mockLogger = new Mock<ILogger<CsvImportService>>();
+		_mockStandingsRefreshService
+			.Setup(s => s.RefreshDivisionStandingsAsync(It.IsAny<int>()))
+			.Returns(Task.CompletedTask);
 
 		_service = new CsvImportService(
-			_mockDbContext.Object,
+			_mockDataContext.Object,
 			_mockSeasonRepository.Object,
 			_mockDivisionRepository.Object,
 			_mockTeamRepository.Object,
 			_mockGameRepository.Object,
+			_mockStandingsRefreshService.Object,
 			_mockLogger.Object
 		);
 	}
@@ -433,7 +440,7 @@ public class CsvImportServiceTests
 
 		// Setup transaction mock
 		var mockTransaction = new Mock<IDbTransaction>();
-		_mockDbContext.Setup(db => db.BeginTransactionAsync(It.IsAny<CancellationToken>()))
+		_mockDataContext.Setup(db => db.BeginTransactionAsync(It.IsAny<CancellationToken>()))
 			.ReturnsAsync(mockTransaction.Object);
 
 		_mockSeasonRepository.Setup(r => r.GetByIdAsync(seasonId)).ReturnsAsync(season);
@@ -511,7 +518,7 @@ public class CsvImportServiceTests
 
 			// Setup transaction mock
 			var mockTransaction = new Mock<IDbTransaction>();
-			_mockDbContext.Setup(db => db.BeginTransactionAsync(It.IsAny<CancellationToken>()))
+			_mockDataContext.Setup(db => db.BeginTransactionAsync(It.IsAny<CancellationToken>()))
 				.ReturnsAsync(mockTransaction.Object);
 
 			_mockSeasonRepository.Setup(r => r.GetByIdAsync(seasonId)).ReturnsAsync(season);
@@ -586,7 +593,7 @@ public class CsvImportServiceTests
 
 				// Setup transaction mock
 				var mockTransaction = new Mock<IDbTransaction>();
-				_mockDbContext.Setup(db => db.BeginTransactionAsync(It.IsAny<CancellationToken>()))
+				_mockDataContext.Setup(db => db.BeginTransactionAsync(It.IsAny<CancellationToken>()))
 					.ReturnsAsync(mockTransaction.Object);
 
 				_mockSeasonRepository.Setup(r => r.GetByIdAsync(seasonId)).ReturnsAsync(season);

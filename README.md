@@ -22,7 +22,7 @@ This application is built using a cleanly separated **3-Layer Onion Architecture
 
 ### 2. Tech Stack Detail
 *   **Runtime:** .NET 10 (ASP.NET Core / C# 14)
-*   **Database:** PostgreSQL (using Entity Framework Core via `Npgsql.EntityFrameworkCore.PostgreSQL`)
+*   **Data storage:** JSON files in Google Cloud Storage (`region42-storage` bucket); local filesystem mirror for development
 *   **Authentication:** Google OAuth authentication
 *   **Styling & UI:** Tailwind / Bootstrap, with responsive custom grids and tables optimized for mobile.
 
@@ -34,7 +34,7 @@ This application is built using a cleanly separated **3-Layer Onion Architecture
 *   **CI/CD Workflows:** Automated builds, tests, and deployments via GitHub Actions (`.github/workflows/deploy.yml`).
 *   **Containerization:** The `Region42.ScoresStandings.Web` project is Dockerized using a multi-stage `Dockerfile`.
 *   **Production Hosting:** Google Cloud Run (Serverless Environment).
-*   **Production Database:** Google Cloud SQL (PostgreSQL instance with standard cloud-sql-proxy connection strings).
+*   **Production Data:** Google Cloud Storage bucket `region42-storage` (JSON documents per season/division).
 
 ---
 
@@ -42,9 +42,11 @@ This application is built using a cleanly separated **3-Layer Onion Architecture
 
 Instead of scanning the codebase to reconstruct business logic, follow these specific sub-guides designed with full, rich details for both developers and AI agents:
 
-### ⚙️ Environment, Database & Secrets Setup
+### ⚙️ Environment, Storage & Secrets Setup
 *   👉 **[Development Setup & Cloud Deployment Guide](docs/development-setup.md)**
-	*   *Covers:* Step-by-step instructions for running Docker PostgreSQL locally, configuring `User Secrets` (Google OAuth and Db connection strings), tunneling to production via standard Google Cloud SQL Proxies, applying database migrations, and configuring production deployments for Google Cloud Run.
+	*   *Covers:* Local development with filesystem JSON storage, Google OAuth configuration, and Google Cloud Run deployment.
+*   👉 **[JSON File Storage Guide](docs/json-storage.md)**
+	*   *Covers:* Bucket layout, configuration, one-time PostgreSQL export, and concurrency behavior.
 
 ### ⚽ Feature & Business Domain Specifications
 *   👉 **[CSV Import Feature Specs](docs/features/csv-import.md)**
