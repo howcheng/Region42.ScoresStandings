@@ -277,7 +277,8 @@ public class ScoresController : Controller
 						scoreUpdate.GameId, scoreUpdate.HomeTeamId, scoreUpdate.AwayTeamId);
 				}
 
-				// Update the score only if both scores are provided (game is complete)
+				// Both scores present: save them. Both blank: clear a score entered by mistake.
+				var scoreCleared = false;
 				if (hasHomeScore && hasAwayScore)
 				{
 					await _scoreService.EnterOrUpdateScoreAsync(
@@ -288,8 +289,16 @@ public class ScoresController : Controller
 					_logger.LogInformation("Score saved for game {GameId}: {HomeScore}-{AwayScore}",
 						scoreUpdate.GameId, scoreUpdate.HomeScore, scoreUpdate.AwayScore);
 				}
+				else if (game.Score?.HomeScore != null || game.Score?.AwayScore != null)
+				{
+					scoreCleared = await _scoreService.DeleteScoreAsync(scoreUpdate.GameId);
+					if (scoreCleared)
+					{
+						_logger.LogInformation("Cleared score for game {GameId}", scoreUpdate.GameId);
+					}
+				}
 
-				if (gameChanged || (hasHomeScore && hasAwayScore))
+				if (gameChanged || (hasHomeScore && hasAwayScore) || scoreCleared)
 				{
 					successCount++;
 				}
