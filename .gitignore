@@ -363,5 +363,6 @@ MigrationBackup/
 FodyWeavers.xsd
 
 # Local JSON storage (development)
+.local-data/
 data/storage/
 src/Region42.ScoresStandings.Web/data/storage/

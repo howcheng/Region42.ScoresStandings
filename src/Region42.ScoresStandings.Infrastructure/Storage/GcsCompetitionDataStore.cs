@@ -1,11 +1,11 @@
-using Google;
+﻿using Google;
 using Google.Cloud.Storage.V1;
 using Microsoft.Extensions.Options;
 using Region42.ScoresStandings.Domain.Documents;
 using Region42.ScoresStandings.Domain.Helpers;
 using Region42.ScoresStandings.Domain.Interfaces;
 
-namespace Region42.ScoresStandings.Web.Storage;
+namespace Region42.ScoresStandings.Infrastructure.Storage;
 
 public class GcsCompetitionDataStore : ICompetitionDataStore
 {

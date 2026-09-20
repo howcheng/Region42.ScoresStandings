@@ -1,7 +1,7 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace Region42.ScoresStandings.Web.Storage;
+namespace Region42.ScoresStandings.Infrastructure.Storage;
 
 public static class CompetitionJsonSerializer
 {

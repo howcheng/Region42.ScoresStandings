@@ -6,10 +6,12 @@
   <Folder Name="/src/">
     <Project Path="src/Region42.ScoresStandings.Application/Region42.ScoresStandings.Application.csproj" />
     <Project Path="src/Region42.ScoresStandings.Domain/Region42.ScoresStandings.Domain.csproj" />
+    <Project Path="src/Region42.ScoresStandings.Infrastructure/Region42.ScoresStandings.Infrastructure.csproj" />
     <Project Path="src/Region42.ScoresStandings.Web/Region42.ScoresStandings.Web.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Region42.ScoresStandings.Application.Tests/Region42.ScoresStandings.Application.Tests.csproj" />
+    <Project Path="tests/Region42.ScoresStandings.Infrastructure.Tests/Region42.ScoresStandings.Infrastructure.Tests.csproj" />
     <Project Path="tests/Region42.ScoresStandings.Web.Tests/Region42.ScoresStandings.Web.Tests.csproj" />
   </Folder>
 </Solution>

@@ -1,12 +1,10 @@
-using Google.Cloud.Storage.V1;
+﻿using Google.Cloud.Storage.V1;
 using Microsoft.AspNetCore.HttpOverrides;
-using Region42.ScoresStandings.Application.Interfaces;
-using Region42.ScoresStandings.Application.Services;
-using Region42.ScoresStandings.Domain.Interfaces;
+using Region42.ScoresStandings.Application.DependencyInjection;
+using Region42.ScoresStandings.Infrastructure.DependencyInjection;
 using Region42.ScoresStandings.Web.Authorization;
-using Region42.ScoresStandings.Web.Data;
 using Region42.ScoresStandings.Web.Middleware;
-using Region42.ScoresStandings.Web.Storage;
+using Region42.ScoresStandings.Web.Migration;
 using Microsoft.AspNetCore.Authorization;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -51,32 +49,8 @@ builder.Services.AddHsts(options =>
 	options.MaxAge = TimeSpan.FromDays(365);
 });
 
-builder.Services.Configure<StorageOptions>(builder.Configuration.GetSection(StorageOptions.SectionName));
-var storageOptions = builder.Configuration.GetSection(StorageOptions.SectionName).Get<StorageOptions>() ?? new StorageOptions();
-
-if (string.Equals(storageOptions.Provider, "Gcs", StringComparison.OrdinalIgnoreCase))
-{
-	builder.Services.AddSingleton(StorageClient.Create());
-	builder.Services.AddSingleton<ICompetitionDataStore, GcsCompetitionDataStore>();
-}
-else
-{
-	builder.Services.AddSingleton<ICompetitionDataStore, LocalFileCompetitionDataStore>();
-}
-
-builder.Services.AddScoped<CompetitionDataContext>();
-builder.Services.AddScoped<ICompetitionDataContext>(sp => sp.GetRequiredService<CompetitionDataContext>());
-builder.Services.AddScoped<IRegion42DbContext>(sp => sp.GetRequiredService<CompetitionDataContext>());
-builder.Services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
-
-builder.Services.AddScoped<ISeasonService, SeasonService>();
-builder.Services.AddScoped<ITeamService, TeamService>();
-builder.Services.AddScoped<IGameService, GameService>();
-builder.Services.AddScoped<IScoreService, ScoreService>();
-builder.Services.AddScoped<IVolunteerPointsService, VolunteerPointsService>();
-builder.Services.AddScoped<IStandingsService, StandingsService>();
-builder.Services.AddScoped<IStandingsRefreshService, StandingsRefreshService>();
-builder.Services.AddScoped<ICsvImportService, CsvImportService>();
+builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddApplication();
 builder.Services.AddScoped<PostgresToJsonExporter>();
 
 builder.Services.AddAuthentication(options =>

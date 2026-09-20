@@ -1,12 +1,13 @@
+﻿using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Options;
 using Region42.ScoresStandings.Domain.Documents;
 using Region42.ScoresStandings.Domain.Entities;
 using Region42.ScoresStandings.Domain.Helpers;
 using Region42.ScoresStandings.Domain.Interfaces;
 
-namespace Region42.ScoresStandings.Web.Storage;
+namespace Region42.ScoresStandings.Infrastructure.Storage;
 
-public class CompetitionDataContext : ICompetitionDataContext, IRegion42DbContext
+public class CompetitionDataContext : ICompetitionDataContext
 {
 	private readonly ICompetitionDataStore _store;
 	private readonly StorageOptions _options;
@@ -387,22 +388,6 @@ public class CompetitionDataContext : ICompetitionDataContext, IRegion42DbContex
 		_activeTransaction = null;
 	}
 
-	#region IRegion42DbContext
-
-	IQueryable<Season> IRegion42DbContext.GetSeasons() => _seasons.AsQueryable();
-	IQueryable<Division> IRegion42DbContext.GetDivisions() => _divisions.AsQueryable();
-	IQueryable<Team> IRegion42DbContext.GetTeams() => _teams.AsQueryable();
-	IQueryable<Game> IRegion42DbContext.GetGames() => _games.AsQueryable();
-	IQueryable<Score> IRegion42DbContext.GetScores() => _scores.AsQueryable();
-	IQueryable<VolunteerPoints> IRegion42DbContext.GetVolunteerPoints() => _volunteerPoints.AsQueryable();
-	IQueryable<User> IRegion42DbContext.GetUsers() => Enumerable.Empty<User>().AsQueryable();
-	IQueryable<Settings> IRegion42DbContext.GetSettings() => new[] { _settings }.AsQueryable();
-	IQueryable<T> IRegion42DbContext.Set<T>() => throw new NotSupportedException("Use typed getters on ICompetitionDataContext.");
-	void IRegion42DbContext.Add<T>(T entity) => Add(entity);
-	void IRegion42DbContext.Update<T>(T entity) => Update(entity);
-	void IRegion42DbContext.Remove<T>(T entity) => Delete(entity);
-
-	#endregion
 
 	private async Task LoadDivisionDataInternalAsync(int year, string competitionSlug, string divisionKey, int divisionId, CancellationToken cancellationToken)
 	{

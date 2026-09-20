@@ -11,6 +11,7 @@ WORKDIR /src
 # Copy all project files first to restore dependencies
 COPY ["src/Region42.ScoresStandings.Domain/Region42.ScoresStandings.Domain.csproj", "src/Region42.ScoresStandings.Domain/"]
 COPY ["src/Region42.ScoresStandings.Application/Region42.ScoresStandings.Application.csproj", "src/Region42.ScoresStandings.Application/"]
+COPY ["src/Region42.ScoresStandings.Infrastructure/Region42.ScoresStandings.Infrastructure.csproj", "src/Region42.ScoresStandings.Infrastructure/"]
 COPY ["src/Region42.ScoresStandings.Web/Region42.ScoresStandings.Web.csproj", "src/Region42.ScoresStandings.Web/"]
 
 # Restore packages
