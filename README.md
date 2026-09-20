@@ -8,17 +8,19 @@ This repository serves as the single source of truth for the project. To assist 
 
 ## 🏗️ Technical Stack & Architecture
 
-This application is built using a cleanly separated **3-Layer Onion Architecture** designed for high maintainability, testability, and decoupled data concerns.
+This application is built using a cleanly separated **4-Layer Onion Architecture** designed for high maintainability, testability, and decoupled data concerns.
 
 ### 1. Project Layering
 *   **`Region42.ScoresStandings.Domain`** (`src/Region42.ScoresStandings.Domain`)
 	*   *Role:* Core domain models, custom business entities, central enums, audit behaviors, and repository interfaces. Contains zero external dependencies.
 *   **`Region42.ScoresStandings.Application`** (`src/Region42.ScoresStandings.Application`)
 	*   *Role:* Domain services, business transaction boundaries, validation behavior, CSV parsers, standing calculations, and DTO mappings.
+*   **`Region42.ScoresStandings.Infrastructure`** (`src/Region42.ScoresStandings.Infrastructure`)
+	*   *Role:* JSON document persistence (local filesystem and Google Cloud Storage), repository implementations, and the in-memory competition data context.
 *   **`Region42.ScoresStandings.Web`** (`src/Region42.ScoresStandings.Web`)
-	*   *Role:* User interface built with **ASP.NET Core Razor Pages** and MVC controllers/views. Houses infrastructure implementation including EF Core `DbContext`, database migrations, OAuth pipeline configuration, and cookie managers.
+	*   *Role:* User interface built with **ASP.NET Core MVC** controllers/views. Houses OAuth pipeline configuration, middleware, and the application composition root.
 *   **Test Projects** (`tests/`)
-	*   Dedicated unit and integration tests covering the core application and domain capabilities.
+	*   Dedicated unit and integration tests covering the application, infrastructure, and web layers.
 
 ### 2. Tech Stack Detail
 *   **Runtime:** .NET 10 (ASP.NET Core / C# 14)

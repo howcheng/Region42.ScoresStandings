@@ -1,4 +1,4 @@
-namespace Region42.ScoresStandings.Web.Storage;
+﻿namespace Region42.ScoresStandings.Infrastructure.Storage;
 
 public class StorageConcurrencyException : Exception
 {

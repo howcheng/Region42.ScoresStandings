@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Options;
+﻿using Microsoft.Extensions.Options;
 using Npgsql;
 using Region42.ScoresStandings.Application.Services;
 using Region42.ScoresStandings.Domain.Documents;
@@ -6,8 +6,9 @@ using Region42.ScoresStandings.Domain.Entities;
 using Region42.ScoresStandings.Domain.Enums;
 using Region42.ScoresStandings.Domain.Helpers;
 using Region42.ScoresStandings.Domain.Interfaces;
+using Region42.ScoresStandings.Infrastructure.Storage;
 
-namespace Region42.ScoresStandings.Web.Storage;
+namespace Region42.ScoresStandings.Web.Migration;
 
 /// <summary>
 /// One-time migration utility: reads existing PostgreSQL data and writes JSON files to storage.

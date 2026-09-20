@@ -1,15 +1,14 @@
-using System.Linq.Expressions;
+﻿using System.Linq.Expressions;
 using Region42.ScoresStandings.Domain.Entities;
 using Region42.ScoresStandings.Domain.Interfaces;
-using Region42.ScoresStandings.Web.Storage;
 
-namespace Region42.ScoresStandings.Web.Data;
+namespace Region42.ScoresStandings.Infrastructure.Repositories;
 
 public class Repository<T> : IRepository<T> where T : BaseEntity
 {
-	private readonly CompetitionDataContext _context;
+	private readonly ICompetitionDataContext _context;
 
-	public Repository(CompetitionDataContext context)
+	public Repository(ICompetitionDataContext context)
 	{
 		_context = context;
 	}

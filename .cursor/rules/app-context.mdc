@@ -27,3 +27,10 @@ In addition, due to low numbers, teams from other regions may be included in the
 ## Process flow
 - Before the season begins, data is loaded via CSV file import, which creates the season and the teams.
 - Each week, admins enter scores and volunteer points. Each team's rank in the standings table is determined by a combination of game points and volunteer points
+
+## Architecture
+- **Domain** — entities, enums, document models, repository interfaces
+- **Application** — business services, standings calculations, CSV import
+- **Infrastructure** — JSON file storage (local/GCS), repositories, data context
+- **Web** — MVC UI, Google OAuth, middleware
+

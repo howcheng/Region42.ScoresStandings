@@ -18,13 +18,13 @@ cd src/Region42.ScoresStandings.Web
 dotnet run
 ```
 
-By default, data is stored under `./data/storage` mirroring the GCS bucket layout (`2026/core-season/season.json`, etc.). No database setup is required.
+By default, data is stored under `../../.local-data/storage` (solution-root `.local-data/storage` when running from the Web project), mirroring the GCS bucket layout (`2026/core-season/season.json`, etc.). This path is kept outside the Web project folder to avoid colliding with a `Data/` source directory on case-insensitive filesystems. No database setup is required.
 
 ### Optional: configure storage location
 
 ```powershell
 dotnet user-secrets set "Storage:Provider" "LocalFile"
-dotnet user-secrets set "Storage:LocalRoot" "./data/storage"
+dotnet user-secrets set "Storage:LocalRoot" "../../.local-data/storage"
 ```
 
 ---

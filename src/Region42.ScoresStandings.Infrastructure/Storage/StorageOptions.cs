@@ -1,4 +1,4 @@
-namespace Region42.ScoresStandings.Web.Storage;
+﻿namespace Region42.ScoresStandings.Infrastructure.Storage;
 
 public class StorageOptions
 {
@@ -7,5 +7,5 @@ public class StorageOptions
 	public string Provider { get; set; } = "LocalFile";
 	public string BucketName { get; set; } = "region42-storage";
 	public string CompetitionSlug { get; set; } = "core-season";
-	public string LocalRoot { get; set; } = "./data/storage";
+	public string LocalRoot { get; set; } = "../../.local-data/storage";
 }

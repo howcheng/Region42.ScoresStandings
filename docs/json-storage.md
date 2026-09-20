@@ -35,7 +35,7 @@ gs://region42-storage/
 
 ## Local development
 
-By default, `appsettings.json` uses `LocalFile` with data under `./data/storage`. No database or GCS credentials are required for normal local development.
+By default, `appsettings.json` uses `LocalFile` with data under `../../.local-data/storage` (solution-root `.local-data/storage`). No database or GCS credentials are required for normal local development.
 
 ## Production (Cloud Run)
 
@@ -59,7 +59,7 @@ To export to local files first for inspection:
 
 ```powershell
 dotnet user-secrets set "Storage:Provider" "LocalFile"
-dotnet user-secrets set "Storage:LocalRoot" "./data/storage"
+dotnet user-secrets set "Storage:LocalRoot" "../../.local-data/storage"
 dotnet run -- --export-from-postgres
 ```
 
