@@ -1,15 +1,18 @@
 ﻿using Google.Cloud.Storage.V1;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.IdentityModel.Tokens;
 using Region42.ScoresStandings.Application.DependencyInjection;
 using Region42.ScoresStandings.Infrastructure.DependencyInjection;
 using Region42.ScoresStandings.Web.Authorization;
 using Region42.ScoresStandings.Web.Middleware;
 using Region42.ScoresStandings.Web.Migration;
-using Microsoft.AspNetCore.Authorization;
 
 var builder = WebApplication.CreateBuilder(args);
 
 var mvcBuilder = builder.Services.AddControllersWithViews();
+builder.Services.AddControllers();
 
 // Configure forwarded headers to handle HTTPS redirection on Google Cloud Run hosting
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
@@ -52,6 +55,12 @@ builder.Services.AddHsts(options =>
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddApplication();
 builder.Services.AddScoped<PostgresToJsonExporter>();
+builder.Services.Configure<ServiceAccountAuthorizationOptions>(
+	builder.Configuration.GetSection(ServiceAccountAuthorizationOptions.SectionName));
+
+var serviceAccountOptions = builder.Configuration
+	.GetSection(ServiceAccountAuthorizationOptions.SectionName)
+	.Get<ServiceAccountAuthorizationOptions>() ?? new ServiceAccountAuthorizationOptions();
 
 builder.Services.AddAuthentication(options =>
 {
@@ -67,6 +76,20 @@ builder.Services.AddAuthentication(options =>
 		?? throw new InvalidOperationException("Google ClientSecret not found in configuration.");
 	options.Scope.Add("email");
 	options.SaveTokens = true;
+})
+.AddJwtBearer("Bearer", options =>
+{
+	options.Authority = "https://accounts.google.com";
+	options.TokenValidationParameters = new TokenValidationParameters
+	{
+		ValidateIssuer = true,
+		ValidIssuers = new[] { "https://accounts.google.com", "accounts.google.com" },
+		ValidateAudience = !string.IsNullOrWhiteSpace(serviceAccountOptions.JwtAudience),
+		ValidAudience = string.IsNullOrWhiteSpace(serviceAccountOptions.JwtAudience)
+			? null
+			: serviceAccountOptions.JwtAudience,
+		ValidateLifetime = true
+	};
 });
 
 builder.Services.AddAuthorizationBuilder()
@@ -74,6 +97,15 @@ builder.Services.AddAuthorizationBuilder()
 	{
 		policy.RequireAuthenticatedUser();
 		policy.Requirements.Add(new DomainRequirement("aysoregion42.org"));
+	})
+	.AddPolicy("VolunteerPointsImportPolicy", policy =>
+	{
+		policy.AddAuthenticationSchemes("Bearer");
+		policy.RequireAuthenticatedUser();
+		if (!string.IsNullOrWhiteSpace(serviceAccountOptions.AllowedServiceAccountEmail))
+		{
+			policy.RequireClaim("email", serviceAccountOptions.AllowedServiceAccountEmail);
+		}
 	});
 
 builder.Services.AddSingleton<IAuthorizationHandler, DomainRequirementHandler>();
@@ -105,6 +137,8 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapStaticAssets();
+
+app.MapControllers();
 
 app.MapControllerRoute(
 	name: "default",

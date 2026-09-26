@@ -1,5 +1,8 @@
 using Microsoft.Extensions.Logging;
+using Region42.ScoresStandings.Application.DTOs;
+using Region42.ScoresStandings.Application.Exceptions;
 using Region42.ScoresStandings.Application.Interfaces;
+using Region42.ScoresStandings.Domain;
 using Region42.ScoresStandings.Domain.Entities;
 using Region42.ScoresStandings.Domain.Interfaces;
 
@@ -11,20 +14,28 @@ namespace Region42.ScoresStandings.Application.Services;
 /// </summary>
 public class VolunteerPointsService : IVolunteerPointsService
 {
+	private static readonly TimeSpan ImportLockTtl = TimeSpan.FromMinutes(15);
+
 	private readonly IRepository<VolunteerPoints> _volunteerPointsRepository;
 	private readonly IRepository<Team> _teamRepository;
+	private readonly IRepository<Division> _divisionRepository;
 	private readonly IStandingsRefreshService _standingsRefreshService;
+	private readonly IStorageWriteLock _storageWriteLock;
 	private readonly ILogger<VolunteerPointsService> _logger;
 
 	public VolunteerPointsService(
 		IRepository<VolunteerPoints> volunteerPointsRepository,
 		IRepository<Team> teamRepository,
+		IRepository<Division> divisionRepository,
 		IStandingsRefreshService standingsRefreshService,
+		IStorageWriteLock storageWriteLock,
 		ILogger<VolunteerPointsService> logger)
 	{
 		_volunteerPointsRepository = volunteerPointsRepository;
 		_teamRepository = teamRepository;
+		_divisionRepository = divisionRepository;
 		_standingsRefreshService = standingsRefreshService;
+		_storageWriteLock = storageWriteLock;
 		_logger = logger;
 	}
 
@@ -40,7 +51,7 @@ public class VolunteerPointsService : IVolunteerPointsService
 	{
 		_logger.LogInformation("Getting volunteer points for team {TeamId}, round {Round}", teamId, round);
 
-		var points = await _volunteerPointsRepository.FindAsync(vp => 
+		var points = await _volunteerPointsRepository.FindAsync(vp =>
 			vp.TeamId == teamId && vp.Round == round);
 
 		return points.FirstOrDefault();
@@ -50,7 +61,7 @@ public class VolunteerPointsService : IVolunteerPointsService
 	{
 		_logger.LogInformation("Getting all volunteer points for division {DivisionId}", divisionId);
 
-		var points = await _volunteerPointsRepository.FindAsync(vp => 
+		var points = await _volunteerPointsRepository.FindAsync(vp =>
 			vp.Team.DivisionId == divisionId);
 
 		return points;
@@ -58,10 +69,10 @@ public class VolunteerPointsService : IVolunteerPointsService
 
 	public async Task<IEnumerable<VolunteerPoints>> GetVolunteerPointsByDivisionAndRoundAsync(int divisionId, int throughRound)
 	{
-		_logger.LogInformation("Getting volunteer points for division {DivisionId} through round {Round}", 
+		_logger.LogInformation("Getting volunteer points for division {DivisionId} through round {Round}",
 			divisionId, throughRound);
 
-		var points = await _volunteerPointsRepository.FindAsync(vp => 
+		var points = await _volunteerPointsRepository.FindAsync(vp =>
 			vp.Team.DivisionId == divisionId && vp.Round <= throughRound);
 
 		return points;
@@ -69,46 +80,19 @@ public class VolunteerPointsService : IVolunteerPointsService
 
 	public async Task<VolunteerPoints> EnterOrUpdateVolunteerPointsAsync(int teamId, int round, int points, string notes)
 	{
-		_logger.LogInformation("Entering/updating volunteer points for team {TeamId}, round {Round}: Points={Points}", 
+		_logger.LogInformation("Entering/updating volunteer points for team {TeamId}, round {Round}: Points={Points}",
 			teamId, round, points);
 
-		// Validate team exists and is active
-		var team = await _teamRepository.GetByIdAsync(teamId);
-		if (team == null)
-		{
-			_logger.LogWarning("Team {TeamId} not found", teamId);
-			throw new ArgumentException($"Team with ID {teamId} not found", nameof(teamId));
-		}
+		var team = await ValidateTeamForPointsAsync(teamId);
+		ValidateRoundAndPoints(round, points, teamId);
 
-		if (!team.IsActive)
-		{
-			_logger.LogWarning("Team {TeamId} is not active", teamId);
-			throw new InvalidOperationException($"Cannot assign volunteer points to inactive team {teamId}");
-		}
-
-		// Validate round is positive
-		if (round < 1)
-		{
-			_logger.LogWarning("Invalid round {Round} for team {TeamId}", round, teamId);
-			throw new ArgumentException("Round must be greater than 0", nameof(round));
-		}
-
-		// Validate points are non-negative
-		if (points < 0)
-		{
-			_logger.LogWarning("Invalid points {Points} for team {TeamId}, round {Round}", points, teamId, round);
-			throw new ArgumentException("Points cannot be negative", nameof(points));
-		}
-
-		// Check if entry already exists for this team and round
-		var existingPoints = await _volunteerPointsRepository.FindAsync(vp => 
+		var existingPoints = await _volunteerPointsRepository.FindAsync(vp =>
 			vp.TeamId == teamId && vp.Round == round);
 
 		var existing = existingPoints.FirstOrDefault();
 
 		if (existing != null)
 		{
-			// Update existing entry
 			_logger.LogInformation("Updating volunteer points for team {TeamId}, round {Round}. Old: {OldPoints}, New: {NewPoints}",
 				teamId, round, existing.Points, points);
 
@@ -119,28 +103,177 @@ public class VolunteerPointsService : IVolunteerPointsService
 			await RefreshStandingsAndSaveAsync(team.DivisionId);
 			return existing;
 		}
-		else
+
+		var newPoints = new VolunteerPoints
 		{
-			var newPoints = new VolunteerPoints
+			TeamId = teamId,
+			Round = round,
+			Points = points,
+			Notes = notes
+		};
+
+		await _volunteerPointsRepository.AddAsync(newPoints);
+		await RefreshStandingsAndSaveAsync(team.DivisionId);
+
+		_logger.LogInformation("Created volunteer points entry for team {TeamId}, round {Round}", teamId, round);
+		return newPoints;
+	}
+
+	public async Task<VolunteerPointsImportResultDto> BulkImportAsync(
+		VolunteerPointsBulkUpdateDto request,
+		bool dryRun,
+		string importedBy,
+		CancellationToken cancellationToken = default)
+	{
+		ArgumentNullException.ThrowIfNull(request);
+		ArgumentException.ThrowIfNullOrWhiteSpace(importedBy);
+
+		var result = new VolunteerPointsImportResultDto { DryRun = dryRun };
+
+		if (request.Entries == null || request.Entries.Count == 0)
+		{
+			result.ValidationErrors.Add("At least one volunteer points entry is required.");
+			return result;
+		}
+
+		var division = await _divisionRepository.GetByIdAsync(request.DivisionId);
+		if (division == null)
+		{
+			result.ValidationErrors.Add($"Division with ID {request.DivisionId} was not found.");
+			return result;
+		}
+
+		IStorageWriteLockHandle? lockHandle = null;
+		if (!dryRun)
+		{
+			lockHandle = await _storageWriteLock.TryAcquireAsync(
+				StorageWriteLockNames.VolunteerPointsImport,
+				importedBy,
+				ImportLockTtl,
+				cancellationToken);
+
+			if (lockHandle == null)
 			{
-				TeamId = teamId,
-				Round = round,
-				Points = points,
-				Notes = notes
-			};
+				throw new StorageWriteLockHeldException(StorageWriteLockNames.VolunteerPointsImport);
+			}
+		}
 
-			await _volunteerPointsRepository.AddAsync(newPoints);
-			await RefreshStandingsAndSaveAsync(team.DivisionId);
+		try
+		{
+			var teamsInDivision = (await _teamRepository.FindAsync(t => t.DivisionId == request.DivisionId))
+				.ToDictionary(t => t.Id);
 
-			_logger.LogInformation("Created volunteer points entry for team {TeamId}, round {Round}", teamId, round);
-			return newPoints;
+			var validEntries = new List<(VolunteerPointsEntryDto Entry, Team Team)>();
+
+			foreach (var entry in request.Entries)
+			{
+				if (entry.TeamId <= 0)
+				{
+					result.SkippedCount++;
+					if (!string.IsNullOrWhiteSpace(entry.TeamName))
+					{
+						result.UnmatchedTeamNames.Add(entry.TeamName);
+					}
+					else
+					{
+						result.ValidationErrors.Add($"Entry for round {entry.Round} is missing a team identifier.");
+					}
+
+					continue;
+				}
+
+				if (!teamsInDivision.TryGetValue(entry.TeamId, out var team))
+				{
+					result.SkippedCount++;
+					result.ValidationErrors.Add(
+						$"Team {entry.TeamId} is not in division {request.DivisionId}.");
+					continue;
+				}
+
+				if (!team.IsActive)
+				{
+					result.SkippedCount++;
+					result.ValidationErrors.Add(
+						$"Team {team.Name} (ID {team.Id}) is not active.");
+					continue;
+				}
+
+				if (entry.Round < 1)
+				{
+					result.SkippedCount++;
+					result.ValidationErrors.Add(
+						$"Team {team.Name} round {entry.Round}: round must be greater than 0.");
+					continue;
+				}
+
+				if (entry.Round > division.TotalRounds)
+				{
+					result.SkippedCount++;
+					result.ValidationErrors.Add(
+						$"Team {team.Name} round {entry.Round}: division only has {division.TotalRounds} rounds.");
+					continue;
+				}
+
+				if (entry.Points < 0)
+				{
+					result.SkippedCount++;
+					result.ValidationErrors.Add(
+						$"Team {team.Name} round {entry.Round}: points cannot be negative.");
+					continue;
+				}
+
+				validEntries.Add((entry, team));
+			}
+
+			if (dryRun)
+			{
+				result.ImportedCount = validEntries.Count;
+				if (validEntries.Count > 0)
+				{
+					result.AffectedDivisionIds.Add(request.DivisionId);
+				}
+
+				return result;
+			}
+
+			foreach (var (entry, _) in validEntries)
+			{
+				var notes = string.IsNullOrWhiteSpace(entry.Notes)
+					? $"Imported by {importedBy} on {DateTime.UtcNow:yyyy-MM-dd}"
+					: entry.Notes;
+
+				await UpsertVolunteerPointsWithoutSaveAsync(entry.TeamId, entry.Round, entry.Points, notes);
+				result.ImportedCount++;
+			}
+
+			if (result.ImportedCount > 0)
+			{
+				await _standingsRefreshService.RefreshDivisionStandingsAsync(request.DivisionId);
+				await _volunteerPointsRepository.SaveChangesAsync();
+				result.AffectedDivisionIds.Add(request.DivisionId);
+			}
+
+			_logger.LogInformation(
+				"Bulk volunteer points import completed for division {DivisionId}: imported={Imported}, skipped={Skipped}, by={ImportedBy}",
+				request.DivisionId,
+				result.ImportedCount,
+				result.SkippedCount,
+				importedBy);
+
+			return result;
+		}
+		finally
+		{
+			if (lockHandle != null)
+			{
+				await lockHandle.DisposeAsync();
+			}
 		}
 	}
 
-	private async Task RefreshStandingsAndSaveAsync(int divisionId)
+	public Task<bool> IsVolunteerPointsImportLockedAsync(CancellationToken cancellationToken = default)
 	{
-		await _standingsRefreshService.RefreshDivisionStandingsAsync(divisionId);
-		await _volunteerPointsRepository.SaveChangesAsync();
+		return _storageWriteLock.IsLockedAsync(StorageWriteLockNames.VolunteerPointsImport, cancellationToken);
 	}
 
 	public async Task<bool> DeleteVolunteerPointsAsync(int volunteerPointsId)
@@ -189,5 +322,67 @@ public class VolunteerPointsService : IVolunteerPointsService
 		}
 
 		return true;
+	}
+
+	private async Task UpsertVolunteerPointsWithoutSaveAsync(int teamId, int round, int points, string notes)
+	{
+		var existingPoints = await _volunteerPointsRepository.FindAsync(vp =>
+			vp.TeamId == teamId && vp.Round == round);
+
+		var existing = existingPoints.FirstOrDefault();
+		if (existing != null)
+		{
+			existing.Points = points;
+			existing.Notes = notes;
+			_volunteerPointsRepository.Update(existing);
+			return;
+		}
+
+		await _volunteerPointsRepository.AddAsync(new VolunteerPoints
+		{
+			TeamId = teamId,
+			Round = round,
+			Points = points,
+			Notes = notes
+		});
+	}
+
+	private async Task RefreshStandingsAndSaveAsync(int divisionId)
+	{
+		await _standingsRefreshService.RefreshDivisionStandingsAsync(divisionId);
+		await _volunteerPointsRepository.SaveChangesAsync();
+	}
+
+	private async Task<Team> ValidateTeamForPointsAsync(int teamId)
+	{
+		var team = await _teamRepository.GetByIdAsync(teamId);
+		if (team == null)
+		{
+			_logger.LogWarning("Team {TeamId} not found", teamId);
+			throw new ArgumentException($"Team with ID {teamId} not found", nameof(teamId));
+		}
+
+		if (!team.IsActive)
+		{
+			_logger.LogWarning("Team {TeamId} is not active", teamId);
+			throw new InvalidOperationException($"Cannot assign volunteer points to inactive team {teamId}");
+		}
+
+		return team;
+	}
+
+	private void ValidateRoundAndPoints(int round, int points, int teamId)
+	{
+		if (round < 1)
+		{
+			_logger.LogWarning("Invalid round {Round} for team {TeamId}", round, teamId);
+			throw new ArgumentException("Round must be greater than 0", nameof(round));
+		}
+
+		if (points < 0)
+		{
+			_logger.LogWarning("Invalid points {Points} for team {TeamId}, round {Round}", points, teamId, round);
+			throw new ArgumentException("Points cannot be negative", nameof(points));
+		}
 	}
 }

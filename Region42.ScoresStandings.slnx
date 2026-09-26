@@ -8,10 +8,12 @@
     <Project Path="src/Region42.ScoresStandings.Domain/Region42.ScoresStandings.Domain.csproj" />
     <Project Path="src/Region42.ScoresStandings.Infrastructure/Region42.ScoresStandings.Infrastructure.csproj" />
     <Project Path="src/Region42.ScoresStandings.Web/Region42.ScoresStandings.Web.csproj" />
+    <Project Path="src/Region42.ScoresStandings.VolunteerSync/Region42.ScoresStandings.VolunteerSync.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Region42.ScoresStandings.Application.Tests/Region42.ScoresStandings.Application.Tests.csproj" />
     <Project Path="tests/Region42.ScoresStandings.Infrastructure.Tests/Region42.ScoresStandings.Infrastructure.Tests.csproj" />
     <Project Path="tests/Region42.ScoresStandings.Web.Tests/Region42.ScoresStandings.Web.Tests.csproj" />
+    <Project Path="tests/Region42.ScoresStandings.VolunteerSync.Tests/Region42.ScoresStandings.VolunteerSync.Tests.csproj" />
   </Folder>
 </Solution>

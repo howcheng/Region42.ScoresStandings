@@ -20,9 +20,15 @@ gs://region42-storage/
       14u-girls.json
 ```
 
-- **season.json** — season metadata, league settings, divisions, and team rosters
+- **season.json** — season metadata, league settings, divisions, and team rosters (authoritative source for team names)
 - **{division-key}.json** — games (with embedded scores), volunteer points, and pre-calculated standings by round
 - **index.json** — catalog of all seasons/competitions in the bucket
+
+### Standings snapshots
+
+Each division file stores pre-calculated standings under `standingsByRound`, keyed by round number. Each team row stores only `teamId` plus stats (wins, points, etc.) — **not** team names. Names are resolved at display time by looking up the team ID in the season roster, the same way game scores reference teams by ID only.
+
+Existing files that still contain `teamName`/`teamShortName` in standings rows remain readable (extra JSON fields are ignored). Those fields are dropped the next time standings are recalculated and saved.
 
 ## Configuration
 

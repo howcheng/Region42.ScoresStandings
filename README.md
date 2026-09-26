@@ -57,6 +57,8 @@ Instead of scanning the codebase to reconstruct business logic, follow these spe
 	*   *Covers:* Score record models, cascading dropdown grids (Division → Round), double score validation models (both scores required), team scheduled-game conflict policies, and retroactive audits.
 *   👉 **[Volunteer Points Feature Specs](docs/features/volunteer-entry.md)**
 	*   *Covers:* Bulk point submission, zero-points support, team-by-round point allocations, and retroactive point-in-time standings calculations.
+*   👉 **[Volunteer Points Auto-Sync](docs/features/volunteer-sync.md)**
+	*   *Covers:* Cloud Run Job, IAM-protected import API, write lock, and GCP Scheduler setup for automated volunteer points import.
 *   👉 **[Maintenance Feature Specs](docs/features/maintenance.md)**
 	*   *Covers:* Intelligent automatic season generation (starting August 1), active state transitions, division preference cookieland (July 31 / Dec 31 lifecycle limits), and teams/divs CRUD rules with soft-delete safety bars.
 *   👉 **[Standings Calculation & Playoff Specs](docs/features/standings-view.md)**

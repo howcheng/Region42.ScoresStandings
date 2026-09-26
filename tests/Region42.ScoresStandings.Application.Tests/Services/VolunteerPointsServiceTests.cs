@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using Region42.ScoresStandings.Application.Interfaces;
 using Region42.ScoresStandings.Application.Services;
+using Region42.ScoresStandings.Domain;
 using Region42.ScoresStandings.Domain.Entities;
 using Region42.ScoresStandings.Domain.Interfaces;
 using Region42.ScoresStandings.Application.Tests.Helpers;
@@ -14,7 +15,9 @@ public class VolunteerPointsServiceTests
 {
 	private readonly Mock<IRepository<VolunteerPoints>> _mockVolunteerPointsRepository;
 	private readonly Mock<IRepository<Team>> _mockTeamRepository;
+	private readonly Mock<IRepository<Division>> _mockDivisionRepository;
 	private readonly Mock<IStandingsRefreshService> _mockStandingsRefreshService;
+	private readonly Mock<IStorageWriteLock> _mockStorageWriteLock;
 	private readonly Mock<ILogger<VolunteerPointsService>> _mockLogger;
 	private readonly VolunteerPointsService _volunteerPointsService;
 
@@ -22,16 +25,29 @@ public class VolunteerPointsServiceTests
 	{
 		_mockVolunteerPointsRepository = new Mock<IRepository<VolunteerPoints>>();
 		_mockTeamRepository = new Mock<IRepository<Team>>();
+		_mockDivisionRepository = new Mock<IRepository<Division>>();
 		_mockStandingsRefreshService = new Mock<IStandingsRefreshService>();
+		_mockStorageWriteLock = new Mock<IStorageWriteLock>();
 		_mockLogger = new Mock<ILogger<VolunteerPointsService>>();
 		_mockStandingsRefreshService
 			.Setup(s => s.RefreshDivisionStandingsAsync(It.IsAny<int>()))
 			.Returns(Task.CompletedTask);
+		_mockStorageWriteLock
+			.Setup(l => l.TryAcquireAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
+			.ReturnsAsync(new TestStorageWriteLockHandle());
 		_volunteerPointsService = new VolunteerPointsService(
 			_mockVolunteerPointsRepository.Object,
 			_mockTeamRepository.Object,
+			_mockDivisionRepository.Object,
 			_mockStandingsRefreshService.Object,
+			_mockStorageWriteLock.Object,
 			_mockLogger.Object);
+	}
+
+	private sealed class TestStorageWriteLockHandle : IStorageWriteLockHandle
+	{
+		public string LockName => StorageWriteLockNames.VolunteerPointsImport;
+		public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 	}
 
 	#region GetVolunteerPointsByTeamAsync Tests

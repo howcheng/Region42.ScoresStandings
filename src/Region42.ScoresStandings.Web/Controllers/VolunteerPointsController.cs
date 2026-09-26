@@ -126,6 +126,12 @@ public class VolunteerPointsController : Controller
 			return RedirectToAction(nameof(Entry), new { seasonId = model?.SeasonId, divisionId = model?.DivisionId });
 		}
 
+		if (await _volunteerPointsService.IsVolunteerPointsImportLockedAsync())
+		{
+			TempData["ErrorMessage"] = "A volunteer points import is currently in progress. Please try again shortly.";
+			return RedirectToAction(nameof(Entry), new { seasonId = model.SeasonId, divisionId = model.DivisionId });
+		}
+
 		var successCount = 0;
 		var errorCount = 0;
 		var errors = new List<string>();
