@@ -1,3 +1,4 @@
+using Region42.ScoresStandings.Application.DTOs;
 using Region42.ScoresStandings.Domain.Entities;
 
 namespace Region42.ScoresStandings.Application.Interfaces;
@@ -42,4 +43,18 @@ public interface IVolunteerPointsService
 	/// Validates that a team exists and is active.
 	/// </summary>
 	Task<bool> ValidateTeamAsync(int teamId);
+
+	/// <summary>
+	/// Imports volunteer points in bulk for a division, refreshing standings once per division.
+	/// </summary>
+	Task<VolunteerPointsImportResultDto> BulkImportAsync(
+		VolunteerPointsBulkUpdateDto request,
+		bool dryRun,
+		string importedBy,
+		CancellationToken cancellationToken = default);
+
+	/// <summary>
+	/// Returns true when a volunteer points import lock is currently held.
+	/// </summary>
+	Task<bool> IsVolunteerPointsImportLockedAsync(CancellationToken cancellationToken = default);
 }

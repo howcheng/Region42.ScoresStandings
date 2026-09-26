@@ -1,8 +1,9 @@
-using FluentAssertions;
+﻿using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Region42.ScoresStandings.Application.Services;
 using Region42.ScoresStandings.Application.Tests.Helpers;
+using Region42.ScoresStandings.Domain.Documents;
 using Region42.ScoresStandings.Domain.Entities;
 using Region42.ScoresStandings.Domain.Enums;
 
@@ -506,6 +507,114 @@ public class StandingsServiceTests
 		results.Should().HaveCount(2);
 		results.Should().Contain(r => r.DivisionId == 1);
 		results.Should().Contain(r => r.DivisionId == 2);
+	}
+
+	#endregion
+
+	#region Cached Snapshot Team Name Lookup Tests
+
+	[Fact]
+	public async Task GetStandingsByRoundAsync_WithCachedSnapshot_ResolvesTeamNamesFromRoster()
+	{
+		var division = TestDataBuilder.CreateDivision(id: 1, totalRounds: 10);
+		var team = TestDataBuilder.CreateTeam(id: 1, divisionId: 1, name: "10UB01 Sharks (Smith)");
+		team.ShortName = "01 Sharks";
+		SetupBasicMocks(division, new List<Team> { team }, new List<Game>(), new List<Score>(), new List<VolunteerPoints>());
+
+		var snapshot = new StandingsSnapshotDocument
+		{
+			ThroughRound = 1,
+			CalculatedAt = DateTime.UtcNow,
+			Teams =
+			[
+				new TeamStandingDocument
+				{
+					Rank = 1,
+					TeamId = 1,
+					GamesPlayed = 1,
+					Wins = 1,
+					GamePoints = 3,
+					TotalPoints = 3
+				}
+			]
+		};
+
+		_context.SetStandingsForDivision(1, new Dictionary<string, StandingsSnapshotDocument> { ["1"] = snapshot });
+
+		var result = await _service.GetStandingsByRoundAsync(1, throughRound: 1);
+
+		result.Standings.Should().HaveCount(1);
+		result.Standings[0].TeamName.Should().Be("10UB01 Sharks (Smith)");
+		result.Standings[0].TeamShortName.Should().Be("01 Sharks");
+	}
+
+	[Fact]
+	public async Task GetStandingsByRoundAsync_WithCachedSnapshot_UsesCurrentNameAfterTeamRename()
+	{
+		var division = TestDataBuilder.CreateDivision(id: 1, totalRounds: 10);
+		var team = TestDataBuilder.CreateTeam(id: 1, divisionId: 1, name: "10UB01 Sharks (Smith)");
+		team.ShortName = "01 Sharks";
+		SetupBasicMocks(division, new List<Team> { team }, new List<Game>(), new List<Score>(), new List<VolunteerPoints>());
+
+		var snapshot = new StandingsSnapshotDocument
+		{
+			ThroughRound = 1,
+			CalculatedAt = DateTime.UtcNow,
+			Teams =
+			[
+				new TeamStandingDocument
+				{
+					Rank = 1,
+					TeamId = 1,
+					GamesPlayed = 1,
+					Wins = 1,
+					GamePoints = 3,
+					TotalPoints = 3
+				}
+			]
+		};
+
+		_context.SetStandingsForDivision(1, new Dictionary<string, StandingsSnapshotDocument> { ["1"] = snapshot });
+
+		team.Name = "10UB01 Sharkz (Smith)";
+		team.ShortName = "01 Sharkz";
+
+		var result = await _service.GetStandingsByRoundAsync(1, throughRound: 1);
+
+		result.Standings[0].TeamName.Should().Be("10UB01 Sharkz (Smith)");
+		result.Standings[0].TeamShortName.Should().Be("01 Sharkz");
+	}
+
+	[Fact]
+	public async Task GetStandingsByRoundAsync_WithCachedSnapshot_ShowsUnknownWhenTeamMissing()
+	{
+		var division = TestDataBuilder.CreateDivision(id: 1, totalRounds: 10);
+		SetupBasicMocks(division, new List<Team>(), new List<Game>(), new List<Score>(), new List<VolunteerPoints>());
+
+		var snapshot = new StandingsSnapshotDocument
+		{
+			ThroughRound = 1,
+			CalculatedAt = DateTime.UtcNow,
+			Teams =
+			[
+				new TeamStandingDocument
+				{
+					Rank = 1,
+					TeamId = 999,
+					GamesPlayed = 1,
+					Wins = 1,
+					GamePoints = 3,
+					TotalPoints = 3
+				}
+			]
+		};
+
+		_context.SetStandingsForDivision(1, new Dictionary<string, StandingsSnapshotDocument> { ["1"] = snapshot });
+
+		var result = await _service.GetStandingsByRoundAsync(1, throughRound: 1);
+
+		result.Standings[0].TeamName.Should().Be("Unknown");
+		result.Standings[0].TeamShortName.Should().Be("Unknown");
 	}
 
 	#endregion

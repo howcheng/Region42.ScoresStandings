@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using Region42.ScoresStandings.Application.Helpers;
 using Region42.ScoresStandings.Application.Interfaces;
 using Region42.ScoresStandings.Domain.Enums;
@@ -57,7 +57,8 @@ public class StandingsService : IStandingsService
 		var cached = _context.GetStandingsByRound(divisionId);
 		if (cached.TryGetValue(throughRound.ToString(), out var snapshot))
 		{
-			return StandingsDocumentMapper.ToEntity(snapshot, divisionId, GetDivisionName(division));
+			var teamsById = _context.Teams.ToDictionary(t => t.Id);
+			return StandingsDocumentMapper.ToEntity(snapshot, divisionId, GetDivisionName(division), teamsById);
 		}
 
 		return CalculateStandings(division, throughRound);

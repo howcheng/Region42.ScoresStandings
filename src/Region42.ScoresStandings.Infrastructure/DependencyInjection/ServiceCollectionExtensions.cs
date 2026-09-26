@@ -18,10 +18,12 @@ public static class ServiceCollectionExtensions
 		{
 			services.AddSingleton(StorageClient.Create());
 			services.AddSingleton<ICompetitionDataStore, GcsCompetitionDataStore>();
+			services.AddSingleton<IStorageWriteLock, GcsStorageWriteLock>();
 		}
 		else
 		{
 			services.AddSingleton<ICompetitionDataStore, LocalFileCompetitionDataStore>();
+			services.AddSingleton<IStorageWriteLock, LocalFileStorageWriteLock>();
 		}
 
 		services.AddScoped<ICompetitionDataContext, CompetitionDataContext>();

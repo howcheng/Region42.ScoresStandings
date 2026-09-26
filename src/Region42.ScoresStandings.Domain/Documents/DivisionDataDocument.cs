@@ -1,8 +1,8 @@
-namespace Region42.ScoresStandings.Domain.Documents;
+﻿namespace Region42.ScoresStandings.Domain.Documents;
 
 public class DivisionDataDocument
 {
-	public const int CurrentSchemaVersion = 1;
+	public const int CurrentSchemaVersion = 2;
 
 	public int SchemaVersion { get; set; } = CurrentSchemaVersion;
 	public int Version { get; set; } = 1;
@@ -53,8 +53,6 @@ public class TeamStandingDocument
 {
 	public int Rank { get; set; }
 	public int TeamId { get; set; }
-	public string TeamName { get; set; } = string.Empty;
-	public string TeamShortName { get; set; } = string.Empty;
 	public int GamesPlayed { get; set; }
 	public int Wins { get; set; }
 	public int Draws { get; set; }

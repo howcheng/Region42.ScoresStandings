@@ -1,0 +1,76 @@
+name: Build and Deploy Volunteer Sync Job
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+    paths:
+      - 'src/Region42.ScoresStandings.VolunteerSync/**'
+      - '.github/workflows/deploy-volunteer-sync.yml'
+
+env:
+  PROJECT_ID: ayso-region-42
+  REGION: us-central1
+  JOB_NAME: region42-volunteer-sync
+  GAR_LOCATION: us-west2
+  GAR_REPOSITORY: region42
+  IMAGE_NAME: region42-volunteer-sync
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    env:
+      HAS_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+      HAS_WIF: ${{ secrets.GCP_WIF_PROVIDER }}
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Google Auth (Service Account Key)
+        if: "${{ env.HAS_SA_KEY != '' }}"
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Google Auth (Workload Identity Federation)
+        if: "${{ env.HAS_SA_KEY == '' && env.HAS_WIF != '' }}"
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_WIF_SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Authorize Docker to Artifact Registry
+        run: gcloud auth configure-docker ${{ env.GAR_LOCATION }}-docker.pkg.dev --quiet
+
+      - name: Build and Push Container Image
+        run: |
+          IMAGE_TAG="${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
+          LATEST_TAG="${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/${{ env.IMAGE_NAME }}:latest"
+
+          docker build -f src/Region42.ScoresStandings.VolunteerSync/Dockerfile -t "$IMAGE_TAG" -t "$LATEST_TAG" .
+          docker push "$IMAGE_TAG"
+          docker push "$LATEST_TAG"
+
+      - name: Deploy Cloud Run Job
+        run: |
+          IMAGE="${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
+
+          if gcloud run jobs describe "${{ env.JOB_NAME }}" --region "${{ env.REGION }}" >/dev/null 2>&1; then
+            gcloud run jobs update "${{ env.JOB_NAME }}" \
+              --region "${{ env.REGION }}" \
+              --image "$IMAGE" \
+              --service-account=region42-volunteer-sync@ayso-region-42.iam.gserviceaccount.com \
+              --set-env-vars=DOTNET_ENVIRONMENT=Production
+          else
+            echo "Cloud Run job '${{ env.JOB_NAME }}' does not exist yet. Create it manually using docs/features/volunteer-sync.md, then re-run this workflow."
+            exit 0
+          fi

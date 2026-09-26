@@ -1,5 +1,6 @@
-using Region42.ScoresStandings.Application.Interfaces;
+﻿using Region42.ScoresStandings.Application.Interfaces;
 using Region42.ScoresStandings.Domain.Documents;
+using Region42.ScoresStandings.Domain.Entities;
 
 namespace Region42.ScoresStandings.Application.Helpers;
 
@@ -17,7 +18,11 @@ public static class StandingsDocumentMapper
 		};
 	}
 
-	public static StandingsResult ToEntity(StandingsSnapshotDocument doc, int divisionId, string divisionName)
+	public static StandingsResult ToEntity(
+		StandingsSnapshotDocument doc,
+		int divisionId,
+		string divisionName,
+		IReadOnlyDictionary<int, Team> teamsById)
 	{
 		return new StandingsResult
 		{
@@ -27,7 +32,7 @@ public static class StandingsDocumentMapper
 			CalculatedAt = doc.CalculatedAt,
 			ScrimmageRounds = doc.ScrimmageRounds,
 			ScrimmageRoundsInRange = doc.ScrimmageRoundsInRange,
-			Standings = doc.Teams.Select(ToEntity).ToList()
+			Standings = doc.Teams.Select(teamDoc => ToEntity(teamDoc, teamsById)).ToList()
 		};
 	}
 
@@ -37,8 +42,6 @@ public static class StandingsDocumentMapper
 		{
 			Rank = standing.Rank,
 			TeamId = standing.TeamId,
-			TeamName = standing.TeamName,
-			TeamShortName = standing.TeamShortName,
 			GamesPlayed = standing.GamesPlayed,
 			Wins = standing.Wins,
 			Draws = standing.Draws,
@@ -55,14 +58,16 @@ public static class StandingsDocumentMapper
 		};
 	}
 
-	public static TeamStanding ToEntity(TeamStandingDocument doc)
+	public static TeamStanding ToEntity(TeamStandingDocument doc, IReadOnlyDictionary<int, Team> teamsById)
 	{
+		teamsById.TryGetValue(doc.TeamId, out var team);
+
 		return new TeamStanding
 		{
 			Rank = doc.Rank,
 			TeamId = doc.TeamId,
-			TeamName = doc.TeamName,
-			TeamShortName = doc.TeamShortName,
+			TeamName = team?.Name ?? "Unknown",
+			TeamShortName = team?.ShortName ?? "Unknown",
 			GamesPlayed = doc.GamesPlayed,
 			Wins = doc.Wins,
 			Draws = doc.Draws,
