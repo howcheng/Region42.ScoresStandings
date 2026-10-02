@@ -1,4 +1,3 @@
-using ClosedXML.Excel;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -9,19 +8,18 @@ namespace Region42.ScoresStandings.VolunteerSync.Tests.Services;
 public class VolunteerPointsExcelParserTests
 {
 	[Fact]
-	public void Parse_ReturnsEmptyEntries_UntilSourceFormatIsMapped()
+	public void Parse_ReadsTeamLogSheet_AndAggregatesHalfPoints()
 	{
-		using var workbook = new XLWorkbook();
-		workbook.AddWorksheet("Volunteer Points");
+		var fixturePath = Path.Combine(AppContext.BaseDirectory, "Fixtures", "assignment_log.xls");
+		File.Exists(fixturePath).Should().BeTrue("test fixture assignment_log.xls should be copied to output");
 
-		using var stream = new MemoryStream();
-		workbook.SaveAs(stream);
-		stream.Position = 0;
-
+		using var stream = File.OpenRead(fixturePath);
 		var parser = new VolunteerPointsExcelParser(Mock.Of<ILogger<VolunteerPointsExcelParser>>());
-		var result = parser.Parse(stream, divisionId: 3);
+		var rows = parser.Parse(stream);
 
-		result.DivisionId.Should().Be(3);
-		result.Entries.Should().BeEmpty();
+		rows.Should().NotBeEmpty();
+		rows.Should().Contain(r => r.Points == 0.5m);
+		rows.Should().OnlyContain(r => !string.IsNullOrWhiteSpace(r.DivisionCode));
+		rows.Should().OnlyContain(r => !string.IsNullOrWhiteSpace(r.Team));
 	}
 }

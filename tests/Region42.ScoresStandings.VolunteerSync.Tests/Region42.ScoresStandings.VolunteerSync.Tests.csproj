@@ -24,4 +24,10 @@
     <ProjectReference Include="..\..\src\Region42.ScoresStandings.VolunteerSync\Region42.ScoresStandings.VolunteerSync.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Update="Fixtures\assignment_log.xls">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>

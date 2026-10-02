@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "Region42.ScoresStandings.VolunteerSync": {
+      "commandName": "Project",
+      "environmentVariables": {
+        "DOTNET_ENVIRONMENT": "Development"
+      }
+    }
+  }
+}
