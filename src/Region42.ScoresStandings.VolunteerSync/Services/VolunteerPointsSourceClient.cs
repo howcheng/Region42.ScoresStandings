@@ -7,8 +7,7 @@ using Region42.ScoresStandings.VolunteerSync.Interfaces;
 namespace Region42.ScoresStandings.VolunteerSync.Services;
 
 /// <summary>
-/// Downloads the latest volunteer points export using cookie-aware HTTP requests.
-/// Login and download paths must be configured once the source application format is known.
+/// Downloads the latest volunteer points export from cgisports using session user tokens.
 /// </summary>
 public class VolunteerPointsSourceClient : IVolunteerPointsSourceClient
 {
@@ -39,34 +38,90 @@ public class VolunteerPointsSourceClient : IVolunteerPointsSourceClient
 			BaseAddress = new Uri(_options.SourceBaseUrl.TrimEnd('/') + "/")
 		};
 
-		await LoginAsync(client, cancellationToken);
+		var sessionUser = await LoginAsync(client, cancellationToken);
+		_logger.LogInformation(
+			"Authenticated to cgisports as session user {SessionUserPrefix}…",
+			TruncateForLog(sessionUser));
 
-		var downloadUri = BuildUri(_options.SourceDownloadPath);
-		_logger.LogInformation("Downloading volunteer points file from {DownloadUri}", downloadUri);
+		if (!string.IsNullOrWhiteSpace(_options.SourceAssignmentLogPath))
+		{
+			var assignmentUri = BuildUri(string.Format(_options.SourceAssignmentLogPath, sessionUser));
+			using var confirmResponse = await client.GetAsync(assignmentUri, cancellationToken);
+			confirmResponse.EnsureSuccessStatusCode();
+		}
 
-		using var response = await client.GetAsync(downloadUri, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+		var downloadUri = BuildUri(string.Format(_options.SourceDownloadPath, sessionUser));
+		_logger.LogInformation("Downloading volunteer points file from {DownloadPath}", downloadUri.PathAndQuery);
+
+		var formValues = new Dictionary<string, string>
+		{
+			["user"] = sessionUser,
+			["ck"] = "ok"
+		};
+
+		using var content = new FormUrlEncodedContent(formValues);
+		using var response = await client.PostAsync(downloadUri, content, cancellationToken);
 		response.EnsureSuccessStatusCode();
 
 		var memoryStream = new MemoryStream();
 		await response.Content.CopyToAsync(memoryStream, cancellationToken);
 		memoryStream.Position = 0;
+
+		ValidateDownloadBody(memoryStream);
+		memoryStream.Position = 0;
 		return memoryStream;
 	}
 
-	private async Task LoginAsync(HttpClient client, CancellationToken cancellationToken)
+	private async Task<string> LoginAsync(HttpClient client, CancellationToken cancellationToken)
 	{
 		var loginUri = BuildUri(_options.SourceLoginPath);
 		_logger.LogInformation("Authenticating to volunteer points source at {LoginUri}", loginUri);
 
 		var formValues = new Dictionary<string, string>
 		{
-			["username"] = _options.SourceUsername,
-			["password"] = _options.SourcePassword
+			["userid"] = _options.SourceUsername,
+			["password"] = _options.SourcePassword,
+			["login"] = "Login",
+			["view_schedule"] = string.Empty
 		};
 
 		using var content = new FormUrlEncodedContent(formValues);
 		using var response = await client.PostAsync(loginUri, content, cancellationToken);
 		response.EnsureSuccessStatusCode();
+
+		var body = await response.Content.ReadAsStringAsync(cancellationToken);
+		var sessionUser = CgiSportsSessionParser.TryExtractSessionUser(response.RequestMessage?.RequestUri, body)
+			?? CgiSportsSessionParser.TryExtractSessionUser(response.Headers.Location, body);
+
+		if (string.IsNullOrWhiteSpace(sessionUser))
+		{
+			throw new InvalidOperationException("Could not determine cgisports session user after login.");
+		}
+
+		return sessionUser;
+	}
+
+	private static void ValidateDownloadBody(Stream stream)
+	{
+		if (stream.Length == 0)
+		{
+			throw new InvalidOperationException("Volunteer points download returned an empty file.");
+		}
+
+		Span<byte> header = stackalloc byte[4];
+		var read = stream.Read(header);
+		stream.Position = 0;
+		if (read < 4)
+		{
+			throw new InvalidOperationException("Volunteer points download is too small to be a valid Excel file.");
+		}
+
+		var isOle = header[0] == 0xD0 && header[1] == 0xCF;
+		var isOpenXml = header[0] == 0x50 && header[1] == 0x4B;
+		if (!isOle && !isOpenXml)
+		{
+			throw new InvalidOperationException("Volunteer points download does not appear to be an Excel workbook.");
+		}
 	}
 
 	private void ValidateConfiguration()
@@ -95,5 +150,11 @@ public class VolunteerPointsSourceClient : IVolunteerPointsSourceClient
 		}
 
 		return new Uri(new Uri(_options.SourceBaseUrl.TrimEnd('/') + "/"), path.TrimStart('/'));
+	}
+
+	private static string TruncateForLog(string sessionUser)
+	{
+		var dot = sessionUser.IndexOf('.');
+		return dot > 0 ? sessionUser[..dot] : sessionUser;
 	}
 }

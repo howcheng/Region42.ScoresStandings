@@ -4,5 +4,5 @@ namespace Region42.ScoresStandings.VolunteerSync.Interfaces;
 
 public interface IVolunteerPointsFileParser
 {
-	VolunteerPointsBulkUpdateDto Parse(Stream fileStream, int divisionId);
+	IReadOnlyList<VolunteerPointsRawRow> Parse(Stream fileStream);
 }

@@ -1,8 +1,10 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Region42.ScoresStandings.Application.Helpers;
 using Region42.ScoresStandings.VolunteerSync.Configuration;
 using Region42.ScoresStandings.VolunteerSync.Interfaces;
+using Region42.ScoresStandings.VolunteerSync.Services;
 
 namespace Region42.ScoresStandings.VolunteerSync;
 
@@ -11,7 +13,7 @@ public class VolunteerSyncWorker : IHostedService
 	private readonly VolunteerSyncOptions _options;
 	private readonly IVolunteerPointsSourceClient _sourceClient;
 	private readonly IVolunteerPointsFileParser _fileParser;
-	private readonly IVolunteerPointsTeamMatcher _teamMatcher;
+	private readonly VolunteerPointsImportPreparer _importPreparer;
 	private readonly IScoresStandingsApiClient _apiClient;
 	private readonly IHostApplicationLifetime _applicationLifetime;
 	private readonly ILogger<VolunteerSyncWorker> _logger;
@@ -20,7 +22,7 @@ public class VolunteerSyncWorker : IHostedService
 		IOptions<VolunteerSyncOptions> options,
 		IVolunteerPointsSourceClient sourceClient,
 		IVolunteerPointsFileParser fileParser,
-		IVolunteerPointsTeamMatcher teamMatcher,
+		VolunteerPointsImportPreparer importPreparer,
 		IScoresStandingsApiClient apiClient,
 		IHostApplicationLifetime applicationLifetime,
 		ILogger<VolunteerSyncWorker> logger)
@@ -28,7 +30,7 @@ public class VolunteerSyncWorker : IHostedService
 		_options = options.Value;
 		_sourceClient = sourceClient;
 		_fileParser = fileParser;
-		_teamMatcher = teamMatcher;
+		_importPreparer = importPreparer;
 		_apiClient = apiClient;
 		_applicationLifetime = applicationLifetime;
 		_logger = logger;
@@ -38,33 +40,99 @@ public class VolunteerSyncWorker : IHostedService
 	{
 		try
 		{
-			if (_options.DivisionId <= 0)
+			await using var fileStream = await _sourceClient.DownloadLatestFileAsync(cancellationToken);
+			var rawRows = _fileParser.Parse(fileStream);
+			_logger.LogInformation("Parsed {RowCount} aggregated volunteer point rows from export", rawRows.Count);
+
+			var syncContext = await _apiClient.GetSyncContextAsync(cancellationToken);
+			if (syncContext.SeasonId <= 0)
 			{
-				throw new InvalidOperationException("VolunteerSync:DivisionId must be greater than zero.");
+				throw new InvalidOperationException("No active season is configured for volunteer points sync.");
 			}
 
-			await using var fileStream = await _sourceClient.DownloadLatestFileAsync(cancellationToken);
-			var parsed = _fileParser.Parse(fileStream, _options.DivisionId);
-			var matched = await _teamMatcher.MatchEntriesAsync(parsed, cancellationToken);
-			var result = await _apiClient.ImportVolunteerPointsAsync(matched, _options.DryRun, cancellationToken);
-
-			_logger.LogInformation(
-				"Volunteer points sync completed. DryRun={DryRun}, Imported={Imported}, Skipped={Skipped}, Unmatched={Unmatched}, ValidationErrors={ValidationErrors}",
-				result.DryRun,
-				result.ImportedCount,
-				result.SkippedCount,
-				result.UnmatchedTeamNames.Count,
-				result.ValidationErrors.Count);
-
-			if (result.ValidationErrors.Count > 0)
+			var divisionImports = _importPreparer.BuildDivisionImports(rawRows, syncContext);
+			if (_options.DivisionId > 0)
 			{
-				foreach (var error in result.ValidationErrors.Take(10))
+				divisionImports = divisionImports.Where(d => d.DivisionId == _options.DivisionId).ToList();
+			}
+
+			if (divisionImports.Count == 0)
+			{
+				_logger.LogWarning("No volunteer points imports were prepared from the export.");
+				Environment.ExitCode = 2;
+				return;
+			}
+
+			var totalImported = 0;
+			var totalSkipped = 0;
+			var totalUnmatched = 0;
+			var anyFailure = false;
+
+			foreach (var import in divisionImports)
+			{
+				var result = await _apiClient.ImportVolunteerPointsAsync(
+					import,
+					_options.DryRun,
+					authoritativeSync: true,
+					cancellationToken);
+
+				totalImported += result.ImportedCount;
+				totalSkipped += result.SkippedCount;
+				totalUnmatched += result.UnmatchedTeamNames.Count;
+
+				_logger.LogInformation(
+					"Division {DivisionId} sync result: DryRun={DryRun}, Imported={Imported}, Zeroed={Zeroed}, Skipped={Skipped}, Unmatched={Unmatched}",
+					import.DivisionId,
+					result.DryRun,
+					result.ImportedCount,
+					result.StaleZeroedCount,
+					result.SkippedCount,
+					result.UnmatchedTeamNames.Count);
+
+				if (result.UnmatchedTeamNames.Count > 0)
 				{
-					_logger.LogWarning("Import validation error: {Error}", error);
+					foreach (var teamName in result.UnmatchedTeamNames.Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(n => n))
+					{
+						if (VolunteerPointsTeamNameMatcher.IsLikelyCoachNameOnly(teamName))
+						{
+							_logger.LogWarning(
+								"Division {DivisionId} skipped coach-name-only label (not auto-matched): {TeamName}",
+								import.DivisionId,
+								teamName);
+						}
+						else
+						{
+							_logger.LogWarning(
+								"Division {DivisionId} could not match team label from export: {TeamName}",
+								import.DivisionId,
+								teamName);
+						}
+					}
+				}
+
+				if (result.ValidationErrors.Count > 0)
+				{
+					foreach (var error in result.ValidationErrors.Take(10))
+					{
+						_logger.LogWarning("Division {DivisionId} validation error: {Error}", import.DivisionId, error);
+					}
+				}
+
+				if (result.ImportedCount == 0 && result.SkippedCount > 0)
+				{
+					anyFailure = true;
 				}
 			}
 
-			if (result.ImportedCount == 0 && result.SkippedCount > 0)
+			_logger.LogInformation(
+				"Volunteer points sync completed. DryRun={DryRun}, Divisions={DivisionCount}, Imported={Imported}, Skipped={Skipped}, Unmatched={Unmatched}",
+				_options.DryRun,
+				divisionImports.Count,
+				totalImported,
+				totalSkipped,
+				totalUnmatched);
+
+			if (anyFailure)
 			{
 				Environment.ExitCode = 2;
 			}

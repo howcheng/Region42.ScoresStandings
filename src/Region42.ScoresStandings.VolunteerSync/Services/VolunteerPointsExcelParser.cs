@@ -1,14 +1,11 @@
-using ClosedXML.Excel;
+using System.Globalization;
+using ExcelDataReader;
 using Microsoft.Extensions.Logging;
 using Region42.ScoresStandings.VolunteerSync.Interfaces;
 using Region42.ScoresStandings.VolunteerSync.Models;
 
 namespace Region42.ScoresStandings.VolunteerSync.Services;
 
-/// <summary>
-/// Parses volunteer points exports from Excel.
-/// Column layout mapping will be implemented once the source file format is documented.
-/// </summary>
 public class VolunteerPointsExcelParser : IVolunteerPointsFileParser
 {
 	private readonly ILogger<VolunteerPointsExcelParser> _logger;
@@ -18,25 +15,156 @@ public class VolunteerPointsExcelParser : IVolunteerPointsFileParser
 		_logger = logger;
 	}
 
-	public VolunteerPointsBulkUpdateDto Parse(Stream fileStream, int divisionId)
+	public IReadOnlyList<VolunteerPointsRawRow> Parse(Stream fileStream)
 	{
 		ArgumentNullException.ThrowIfNull(fileStream);
 
-		using var workbook = new XLWorkbook(fileStream);
-		var worksheet = workbook.Worksheets.FirstOrDefault()
-			?? throw new InvalidOperationException("Volunteer points export does not contain any worksheets.");
+		System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
 
-		_logger.LogWarning(
-			"Volunteer points Excel parser is not yet mapped to the source format. Worksheet '{WorksheetName}' will produce zero entries until mapping is implemented.",
-			worksheet.Name);
+		using var reader = ExcelReaderFactory.CreateReader(fileStream);
+		var dataSet = reader.AsDataSet();
+		var table = dataSet.Tables.Cast<System.Data.DataTable>()
+			.FirstOrDefault(t => t.TableName.Equals("team_log", StringComparison.OrdinalIgnoreCase))
+			?? throw new InvalidOperationException("Volunteer points export is missing the team_log worksheet.");
 
-		// TODO: Map source columns (team name, round columns or rows) once export format is known.
-		_ = worksheet;
-
-		return new VolunteerPointsBulkUpdateDto
+		if (table.Rows.Count == 0)
 		{
-			DivisionId = divisionId,
-			Entries = new List<VolunteerPointsEntryDto>()
-		};
+			return Array.Empty<VolunteerPointsRawRow>();
+		}
+
+		var headerRow = table.Rows[0];
+		var columnIndex = BuildColumnIndex(headerRow);
+		ValidateRequiredColumns(columnIndex);
+
+		var aggregated = new Dictionary<(string Division, string Team, DateTime Date), decimal>();
+
+		for (var rowIndex = 1; rowIndex < table.Rows.Count; rowIndex++)
+		{
+			var row = table.Rows[rowIndex];
+			var division = GetString(row, columnIndex["Division"]);
+			var team = GetString(row, columnIndex["Team"]);
+			if (string.IsNullOrWhiteSpace(division) || string.IsNullOrWhiteSpace(team))
+			{
+				continue;
+			}
+
+			if (!TryParseDate(row[columnIndex["Date"]], out var date))
+			{
+				_logger.LogWarning("Skipping team_log row {RowIndex}: invalid date", rowIndex + 1);
+				continue;
+			}
+
+			var points = ParsePoints(row[columnIndex["Points Earned"]]);
+			if (points < 0)
+			{
+				_logger.LogWarning("Skipping team_log row {RowIndex}: negative points", rowIndex + 1);
+				continue;
+			}
+
+			var key = (division.Trim(), team.Trim(), date.Date);
+			aggregated[key] = aggregated.GetValueOrDefault(key) + points;
+		}
+
+		return aggregated.Select(kvp => new VolunteerPointsRawRow
+		{
+			DivisionCode = kvp.Key.Division,
+			Team = kvp.Key.Team,
+			Date = kvp.Key.Date,
+			Points = kvp.Value
+		}).ToList();
+	}
+
+	private static Dictionary<string, int> BuildColumnIndex(System.Data.DataRow headerRow)
+	{
+		var map = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+		for (var i = 0; i < headerRow.ItemArray.Length; i++)
+		{
+			var name = headerRow[i]?.ToString()?.Trim();
+			if (!string.IsNullOrEmpty(name))
+			{
+				map[name] = i;
+			}
+		}
+
+		return map;
+	}
+
+	private static void ValidateRequiredColumns(IReadOnlyDictionary<string, int> columnIndex)
+	{
+		foreach (var required in new[] { "Team", "Date", "Points Earned", "Division" })
+		{
+			if (!columnIndex.ContainsKey(required))
+			{
+				throw new InvalidOperationException($"Volunteer points export is missing required column '{required}'.");
+			}
+		}
+	}
+
+	private static string GetString(System.Data.DataRow row, int column)
+	{
+		return row[column]?.ToString()?.Trim() ?? string.Empty;
+	}
+
+	private static decimal ParsePoints(object? cellValue)
+	{
+		if (cellValue == null || cellValue == DBNull.Value)
+		{
+			return 0m;
+		}
+
+		if (cellValue is double d)
+		{
+			return Convert.ToDecimal(d);
+		}
+
+		if (cellValue is float f)
+		{
+			return Convert.ToDecimal(f);
+		}
+
+		if (cellValue is decimal dec)
+		{
+			return dec;
+		}
+
+		var text = cellValue.ToString()?.Trim();
+		if (string.IsNullOrEmpty(text))
+		{
+			return 0m;
+		}
+
+		return decimal.TryParse(text, NumberStyles.Number, CultureInfo.InvariantCulture, out var parsed)
+			? parsed
+			: 0m;
+	}
+
+	private static bool TryParseDate(object? cellValue, out DateTime date)
+	{
+		date = default;
+		if (cellValue == null || cellValue == DBNull.Value)
+		{
+			return false;
+		}
+
+		if (cellValue is DateTime dt)
+		{
+			date = dt.Date;
+			return true;
+		}
+
+		if (cellValue is double oaDate)
+		{
+			date = DateTime.FromOADate(oaDate).Date;
+			return true;
+		}
+
+		var text = cellValue.ToString()?.Trim();
+		if (string.IsNullOrEmpty(text))
+		{
+			return false;
+		}
+
+		return DateTime.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.None, out date)
+			|| DateTime.TryParse(text, CultureInfo.CurrentCulture, DateTimeStyles.None, out date);
 	}
 }
