@@ -39,6 +39,8 @@ public class VolunteerPointsServiceTests
 			_mockVolunteerPointsRepository.Object,
 			_mockTeamRepository.Object,
 			_mockDivisionRepository.Object,
+			Mock.Of<ISeasonService>(),
+			Mock.Of<IGameService>(),
 			_mockStandingsRefreshService.Object,
 			_mockStorageWriteLock.Object,
 			_mockLogger.Object);

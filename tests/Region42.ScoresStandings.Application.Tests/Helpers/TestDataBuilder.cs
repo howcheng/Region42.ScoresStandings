@@ -107,7 +107,7 @@ public static class TestDataBuilder
 		};
 	}
 
-	public static VolunteerPoints CreateVolunteerPoints(int id = 1, int teamId = 1, int round = 1, int points = 3, string notes = "Volunteer duty completed")
+	public static VolunteerPoints CreateVolunteerPoints(int id = 1, int teamId = 1, int round = 1, decimal points = 3, string notes = "Volunteer duty completed")
 	{
 		return new VolunteerPoints
 		{

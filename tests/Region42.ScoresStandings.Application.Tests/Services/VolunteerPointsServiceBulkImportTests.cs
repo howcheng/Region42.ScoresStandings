@@ -33,6 +33,8 @@ public class VolunteerPointsServiceBulkImportTests
 			_mockVolunteerPointsRepository.Object,
 			_mockTeamRepository.Object,
 			_mockDivisionRepository.Object,
+			Mock.Of<ISeasonService>(),
+			Mock.Of<IGameService>(),
 			_mockStandingsRefreshService.Object,
 			_mockStorageWriteLock.Object,
 			Mock.Of<ILogger<VolunteerPointsService>>());
@@ -125,6 +127,46 @@ public class VolunteerPointsServiceBulkImportTests
 		var act = () => _service.BulkImportAsync(request, dryRun: false, importedBy: "volunteer-sync");
 
 		await act.Should().ThrowAsync<StorageWriteLockHeldException>();
+	}
+
+	[Fact]
+	public async Task BulkImportAsync_AuthoritativeSync_DryRun_ReportsStaleZeroes()
+	{
+		var division = TestDataBuilder.CreateDivision(id: 5, totalRounds: 10);
+		var team = TestDataBuilder.CreateTeam(id: 10, divisionId: 5);
+
+		_mockDivisionRepository.Setup(r => r.GetByIdAsync(5)).ReturnsAsync(division);
+		_mockTeamRepository
+			.Setup(r => r.FindAsync(It.IsAny<Expression<Func<Team, bool>>>()))
+			.ReturnsAsync(new[] { team });
+
+		var stale = TestDataBuilder.CreateVolunteerPoints(id: 99, teamId: 10, round: 3, points: 2);
+		stale.ModifiedBy = "region42-volunteer-sync@ayso-region-42.iam.gserviceaccount.com";
+		stale.Team = team;
+
+		_mockVolunteerPointsRepository
+			.Setup(r => r.FindAsync(It.IsAny<Expression<Func<VolunteerPoints, bool>>>()))
+			.ReturnsAsync((Expression<Func<VolunteerPoints, bool>> predicate) =>
+			{
+				var compiled = predicate.Compile();
+				var all = new VolunteerPoints[] { stale };
+				return all.Where(compiled).ToList();
+			});
+
+		var request = new VolunteerPointsBulkUpdateDto
+		{
+			DivisionId = 5,
+			Entries = [new VolunteerPointsEntryDto { TeamId = 10, Round = 1, Points = 1.5m }]
+		};
+
+		var result = await _service.BulkImportAsync(
+			request,
+			dryRun: true,
+			importedBy: "region42-volunteer-sync@ayso-region-42.iam.gserviceaccount.com",
+			authoritativeSync: true);
+
+		result.ImportedCount.Should().Be(1);
+		result.StaleZeroedCount.Should().Be(1);
 	}
 
 	private sealed class TestStorageWriteLockHandle : IStorageWriteLockHandle

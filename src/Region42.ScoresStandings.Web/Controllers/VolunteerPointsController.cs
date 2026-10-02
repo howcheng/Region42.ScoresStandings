@@ -202,7 +202,7 @@ public class TeamVolunteerPointsRow
 public class RoundPointsCell
 {
 	public int Round { get; set; }
-	public int Points { get; set; }
+	public decimal Points { get; set; }
 	public string Notes { get; set; } = string.Empty;
 	public int? VolunteerPointsId { get; set; }  // For tracking existing entries
 }

@@ -54,10 +54,10 @@ public class VolunteerPointsImportControllerTests
 		};
 
 		_mockVolunteerPointsService
-			.Setup(s => s.BulkImportAsync(request, false, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+			.Setup(s => s.BulkImportAsync(request, false, It.IsAny<string>(), false, It.IsAny<CancellationToken>()))
 			.ReturnsAsync(expected);
 
-		var result = await _controller.Import(request, dryRun: false, CancellationToken.None);
+		var result = await _controller.Import(request, dryRun: false, authoritativeSync: false, CancellationToken.None);
 
 		var okResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;
 		okResult.Value.Should().BeEquivalentTo(expected);
@@ -73,10 +73,10 @@ public class VolunteerPointsImportControllerTests
 		};
 
 		_mockVolunteerPointsService
-			.Setup(s => s.BulkImportAsync(request, false, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+			.Setup(s => s.BulkImportAsync(request, false, It.IsAny<string>(), false, It.IsAny<CancellationToken>()))
 			.ThrowsAsync(new StorageWriteLockHeldException(Region42.ScoresStandings.Domain.StorageWriteLockNames.VolunteerPointsImport));
 
-		var result = await _controller.Import(request, dryRun: false, CancellationToken.None);
+		var result = await _controller.Import(request, dryRun: false, authoritativeSync: false, CancellationToken.None);
 
 		result.Result.Should().BeOfType<ConflictObjectResult>();
 	}

@@ -196,9 +196,7 @@ public static class StandingsCalculator
 			else if (!hasMinVolunteerPoints && withinPlayoffSpots)
 			{
 				var needed = minVolunteerPoints - standing.VolunteerPoints;
-				standing.PlayoffQualificationNote = needed == 1
-					? "Needs 1 more volunteer point to qualify"
-					: $"Needs {needed} more volunteer points to qualify";
+				standing.PlayoffQualificationNote = FormatVolunteerPointsNeeded(needed, "to qualify");
 			}
 			else if (hasMinVolunteerPoints && !withinPlayoffSpots)
 			{
@@ -207,10 +205,14 @@ public static class StandingsCalculator
 			else
 			{
 				var needed = minVolunteerPoints - standing.VolunteerPoints;
-				standing.PlayoffQualificationNote = needed == 1
-					? "Needs 1 more volunteer point and must improve standing"
-					: $"Needs {needed} more volunteer points and must improve standing";
+				standing.PlayoffQualificationNote = FormatVolunteerPointsNeeded(needed, "and must improve standing");
 			}
 		}
+	}
+
+	private static string FormatVolunteerPointsNeeded(decimal needed, string suffix)
+	{
+		var formatted = needed == 1m ? "1 more volunteer point" : $"{needed:G29} more volunteer points";
+		return $"Needs {formatted} {suffix}";
 	}
 }
