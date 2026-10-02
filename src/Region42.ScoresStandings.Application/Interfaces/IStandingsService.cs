@@ -72,8 +72,8 @@ public class TeamStanding
 	public int GoalsAgainst { get; set; }
 	public int GoalDifferential { get; set; }
 	public int GamePoints { get; set; }  // Win=3, Draw=1, Loss=0
-	public int VolunteerPoints { get; set; }
-	public int TotalPoints { get; set; }  // GamePoints + VolunteerPoints
+	public decimal VolunteerPoints { get; set; }
+	public decimal TotalPoints { get; set; }  // GamePoints + VolunteerPoints
 
 	// Adjusted points per game for divisions with odd teams
 	public decimal PointsPerGame { get; set; }

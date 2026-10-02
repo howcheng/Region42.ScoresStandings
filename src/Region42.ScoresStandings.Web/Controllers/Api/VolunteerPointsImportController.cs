@@ -8,7 +8,11 @@ namespace Region42.ScoresStandings.Web.Controllers.Api;
 
 [ApiController]
 [Route("api/volunteer-points")]
+#if DEBUG
+[AllowAnonymous]
+#else
 [Authorize(Policy = "VolunteerPointsImportPolicy")]
+#endif
 public class VolunteerPointsImportController : ControllerBase
 {
 	private readonly IVolunteerPointsService _volunteerPointsService;
@@ -22,10 +26,23 @@ public class VolunteerPointsImportController : ControllerBase
 		_logger = logger;
 	}
 
+	[HttpGet("sync-context")]
+	public async Task<ActionResult<VolunteerPointsSyncContextDto>> GetSyncContext(CancellationToken cancellationToken = default)
+	{
+		var context = await _volunteerPointsService.GetSyncContextAsync(cancellationToken);
+		if (context.SeasonId <= 0)
+		{
+			return NotFound(new { message = "No active season is configured." });
+		}
+
+		return Ok(context);
+	}
+
 	[HttpPost("import")]
 	public async Task<ActionResult<VolunteerPointsImportResultDto>> Import(
 		[FromBody] VolunteerPointsBulkUpdateDto request,
 		[FromQuery] bool dryRun = false,
+		[FromQuery] bool authoritativeSync = false,
 		CancellationToken cancellationToken = default)
 	{
 		if (request == null)
@@ -33,7 +50,12 @@ public class VolunteerPointsImportController : ControllerBase
 			return BadRequest("Request body is required.");
 		}
 
-		var importedBy = User.FindFirst("email")?.Value ?? "volunteer-sync";
+		var importedBy = User.FindFirst("email")?.Value
+#if DEBUG
+			?? "volunteer-sync-local";
+#else
+			?? "volunteer-sync";
+#endif
 
 		try
 		{
@@ -41,6 +63,7 @@ public class VolunteerPointsImportController : ControllerBase
 				request,
 				dryRun,
 				importedBy,
+				authoritativeSync,
 				cancellationToken);
 
 			if (result.ValidationErrors.Count > 0 && result.ImportedCount == 0 && result.SkippedCount > 0)

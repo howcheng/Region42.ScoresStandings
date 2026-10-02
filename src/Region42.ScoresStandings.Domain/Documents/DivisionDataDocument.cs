@@ -34,7 +34,7 @@ public class VolunteerPointsDocument
 {
 	public int TeamId { get; set; }
 	public int Round { get; set; }
-	public int Points { get; set; }
+	public decimal Points { get; set; }
 	public string Notes { get; set; } = string.Empty;
 	public DateTime ModifiedAt { get; set; }
 	public string ModifiedBy { get; set; } = string.Empty;
@@ -61,8 +61,8 @@ public class TeamStandingDocument
 	public int GoalsAgainst { get; set; }
 	public int GoalDifferential { get; set; }
 	public int GamePoints { get; set; }
-	public int VolunteerPoints { get; set; }
-	public int TotalPoints { get; set; }
+	public decimal VolunteerPoints { get; set; }
+	public decimal TotalPoints { get; set; }
 	public decimal PointsPerGame { get; set; }
 	public bool QualifiesForPlayoffs { get; set; }
 	public string? PlayoffQualificationNote { get; set; }

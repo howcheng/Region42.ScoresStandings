@@ -28,7 +28,7 @@ The user interface handles volunteer points by rendering a highly optimized matr
 
 The `VolunteerPointsService` applies strict validation rules when a bulk save is submitted:
 
-1.  **Non-Negative Integrity:** All point entries must be greater than or equal to zero ($\ge 0$). Negative submissions are blocked in the field validation stage.
+1.  **Non-Negative Integrity:** All point entries must be greater than or equal to zero ($\ge 0$). Negative submissions are blocked in the field validation stage. Half-point increments ($0.5$) are supported.
 2.  **Support for Explicit Zeroes:** Entering `"0"` is fully supported and saved. If a team's earned points are manually reduced back down to zero (or if they run a week without earned volunteer slots), entering `0` overrides previous points, allowing backward adjustments.
 3.  **Active Teams Only:** Volunteer points can only be recorded for teams that have their `IsActive` flag set to `true`. Inactive (soft-deleted) team slots are excluded from the grid.
 4.  **Round Boundaries:** Points must map to a valid integer round increment starting at `1` up to the division's max rounds.

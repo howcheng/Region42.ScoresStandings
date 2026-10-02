@@ -50,6 +50,23 @@ public static class DivisionKeyHelper
 		return gender == Gender.Boys ? "Boys" : "Girls";
 	}
 
+	/// <summary>
+	/// Short division code used in the cgisports export (e.g. 10UB, 12UG).
+	/// </summary>
+	public static string ToCgiSportsDivisionCode(AgeGroup ageGroup, Gender gender)
+	{
+		var age = ageGroup switch
+		{
+			AgeGroup.U10 => "10U",
+			AgeGroup.U12 => "12U",
+			AgeGroup.U14 => "14U",
+			_ => ageGroup.ToString()
+		};
+
+		var genderInitial = gender == Gender.Boys ? "B" : "G";
+		return $"{age}{genderInitial}";
+	}
+
 	public static string GetCompetitionPath(int year, string competitionSlug)
 	{
 		return $"{year}/{competitionSlug}";

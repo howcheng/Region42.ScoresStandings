@@ -32,7 +32,7 @@ public interface IVolunteerPointsService
 	/// <summary>
 	/// Enters or updates volunteer points for a team in a specific round.
 	/// </summary>
-	Task<VolunteerPoints> EnterOrUpdateVolunteerPointsAsync(int teamId, int round, int points, string notes);
+	Task<VolunteerPoints> EnterOrUpdateVolunteerPointsAsync(int teamId, int round, decimal points, string notes);
 
 	/// <summary>
 	/// Deletes volunteer points entry.
@@ -51,7 +51,13 @@ public interface IVolunteerPointsService
 		VolunteerPointsBulkUpdateDto request,
 		bool dryRun,
 		string importedBy,
+		bool authoritativeSync = false,
 		CancellationToken cancellationToken = default);
+
+	/// <summary>
+	/// Returns sync metadata for the volunteer points import job (active season divisions, teams, round map).
+	/// </summary>
+	Task<VolunteerPointsSyncContextDto> GetSyncContextAsync(CancellationToken cancellationToken = default);
 
 	/// <summary>
 	/// Returns true when a volunteer points import lock is currently held.

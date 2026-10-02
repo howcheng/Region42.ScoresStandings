@@ -1,156 +1,216 @@
 # Volunteer Points Auto-Sync
 
-Automated volunteer points import from an external UI-only volunteer tracking application into Region 42 Scores & Standings.
+
+
+Automated volunteer points import from the cgisports referee assignment log into Region 42 Scores & Standings.
+
+
 
 ## Architecture
 
+
+
 - **Cloud Scheduler** triggers a **Cloud Run Job** (`region42-volunteer-sync`) on a cron schedule.
-- The job is a thin client: download Excel export → parse → POST JSON to the web app API.
-- **All business logic** (validation, standings refresh, storage writes) runs in the web app via `POST /api/volunteer-points/import`.
+
+- The job downloads the legacy **`.xls` assignment log** from cgisports, parses the **`team_log`** sheet, and POSTs per-division payloads to the web app API.
+
+- **All business logic** (validation, team name matching, authoritative reconciliation, standings refresh, storage writes) runs in the web app via `POST /api/volunteer-points/import`.
+
 - A **GCS/local write lock** (`admin/locks/volunteer-points-import.lock`) prevents overlapping bulk imports and blocks the admin volunteer points grid while a sync is running.
+
+
 
 ## API
 
+
+
 | Method | Path | Auth |
+
 |--------|------|------|
-| `POST` | `/api/volunteer-points/import?dryRun=false` | Google identity token (service account) |
+
+| `GET` | `/api/volunteer-points/sync-context` | Google identity token (service account) |
+
+| `POST` | `/api/volunteer-points/import?dryRun=false&authoritativeSync=true` | Google identity token (service account) |
+
+
+
+### Sync context
+
+
+
+Returns the active season, each division’s **`cgiDivisionCode`** (`10UB`, `12UG`, …), team roster metadata, and **`roundByDate`** (game date → round) used to map export dates to standings rounds.
+
+
+
+### Import
+
+
 
 Request body: `VolunteerPointsBulkUpdateDto`
 
+
+
 ```json
+
 {
+
   "divisionId": 1,
+
   "entries": [
-    { "teamId": 10, "teamName": "10UB01 Sharks", "round": 1, "points": 2, "notes": "" }
+
+    { "teamName": "10UB04 (Timen)", "round": 1, "points": 1.5 }
+
   ]
+
 }
+
 ```
 
-Use `dryRun=true` to validate without acquiring the write lock or persisting data.
+
+
+- **`dryRun=true`** — validate without acquiring the write lock or persisting data.
+
+- **`authoritativeSync=true`** — treat the payload as the assignment-log snapshot for that division: upsert all entries, zero out prior **sync-owned** `(team, round)` cells that are absent from the payload, and overwrite manual values for cells included in the payload.
+
+
+
+Volunteer points support **half increments** (`0.5`) as `decimal` values.
+
+**Team labels:** cgisports uses short names like `10UB04 (Timen)`; the API resolves them to roster names via `VolunteerPointsTeamNameMatcher` (division + team number, bare `10UB04`, or team number alone such as `04` within the division import). Labels that are only letters (likely a coach last name with no team number) are **not** auto-matched because roster names use full coach names and false positives are too likely. When preparing a division import, rows whose label starts with another division code (for example `12UB02` under the `10UB` column) are dropped. Any remaining unmatched labels are logged by the sync job; the run continues.
+
+
+
+## cgisports source integration
+
+
+
+1. **Login:** `POST https://cgisports.com/ref/2130/` with form fields `userid`, `password`, `login=Login`, and empty `view_schedule`.
+
+2. **Session:** Read `user={login}.{sessionId}` from the post-login redirect URL or HTML (`name="user" value="..."`).
+
+3. **Download:** `POST` to `/ref/2130?user={sessionUser}&get_logs=1` with `user` and `ck=ok` in the form body.
+
+
+
+VolunteerSync configuration ([`appsettings.json`](../../src/Region42.ScoresStandings.VolunteerSync/appsettings.json)):
+
+
+
+| Setting | Example |
+
+|---------|---------|
+
+| `SourceLoginPath` | `/ref/2130/` |
+
+| `SourceAssignmentLogPath` | `/ref/2130?user={0}&assignment_log=1` |
+
+| `SourceDownloadPath` | `/ref/2130?user={0}&get_logs=1` |
+
+
+
+`{0}` is the **full session user token**, not the bare login name.
+
+
 
 ## Authentication
 
+
+
 The sync job uses a dedicated service account:
 
+
+
 - **Email:** `region42-volunteer-sync@ayso-region-42.iam.gserviceaccount.com`
+
 - **Role:** `roles/run.invoker` on Cloud Run service `region42-scores-standings`
+
+
 
 The web app validates JWT bearer tokens where:
 
+
+
 - `email` claim matches `Authentication:ServiceAccount:AllowedServiceAccountEmail`
+
 - `aud` matches `Authentication:ServiceAccount:JwtAudience` (Cloud Run service URL)
+
+
 
 ### Manual API test
 
+
+
 ```powershell
+
 $audience = "https://region42-scores-standings-fcnndtynza-uc.a.run.app"
+
 $token = gcloud auth print-identity-token --audiences=$audience `
+
   --impersonate-service-account=region42-volunteer-sync@ayso-region-42.iam.gserviceaccount.com
 
-curl -X POST "$audience/api/volunteer-points/import?dryRun=true" `
+
+
+curl "$audience/api/volunteer-points/sync-context" `
+
+  -H "Authorization: Bearer $token"
+
+
+
+curl -X POST "$audience/api/volunteer-points/import?dryRun=true&authoritativeSync=true" `
+
   -H "Authorization: Bearer $token" `
+
   -H "Content-Type: application/json" `
-  -d '{"divisionId":1,"entries":[{"teamId":10,"round":1,"points":2}]}'
+
+  -d '{"divisionId":1,"entries":[{"teamName":"10UB01 Sharks (Smith)","round":1,"points":1.5}]}'
+
 ```
+
+
 
 ## GCP setup
 
-### 1. Service account
 
-```powershell
-gcloud iam service-accounts create region42-volunteer-sync `
-  --display-name="Region 42 Volunteer Points Sync"
 
-gcloud run services add-iam-policy-binding region42-scores-standings `
-  --region=us-central1 `
-  --member="serviceAccount:region42-volunteer-sync@ayso-region-42.iam.gserviceaccount.com" `
-  --role="roles/run.invoker"
-```
+See previous sections in this file for service account, secrets (`volunteer-source-username` / `volunteer-source-password` with **userid** and password for cgisports), Cloud Run Job, and Cloud Scheduler. Set `VolunteerSync__DryRun=false` once dry-run validation passes.
 
-### 2. Secrets (source app credentials)
 
-```powershell
-gcloud secrets create volunteer-source-username --replication-policy=automatic
-gcloud secrets create volunteer-source-password --replication-policy=automatic
-# Your real login for the external volunteer points website
-echo -n "your-actual-username" | gcloud secrets versions add volunteer-source-username --data-file=-
-echo -n "your-actual-password" | gcloud secrets versions add volunteer-source-password --data-file=-
-```
 
-Grant the sync service account `roles/secretmanager.secretAccessor` on those secrets.
+The job imports **all divisions** in the active season from one Excel file. Optional `VolunteerSync__DivisionId` limits a run to a single division for debugging.
 
-### 3. Cloud Run Job
 
-Build and deploy from repository root:
-
-```powershell
-docker build -f src/Region42.ScoresStandings.VolunteerSync/Dockerfile -t region42-volunteer-sync .
-# push to Artifact Registry, then:
-
-gcloud run jobs create region42-volunteer-sync `
-  --image=us-west2-docker.pkg.dev/ayso-region-42/region42/region42-volunteer-sync:latest `
-  --region=us-central1 `
-  --service-account=region42-volunteer-sync@ayso-region-42.iam.gserviceaccount.com `
-  --set-env-vars="DOTNET_ENVIRONMENT=Production,VolunteerSync__DivisionId=<id>" `
-  --set-secrets="VolunteerSync__SourceUsername=volunteer-source-username:latest,VolunteerSync__SourcePassword=volunteer-source-password:latest"
-```
-
-The container Dockerfile also sets `DOTNET_ENVIRONMENT=Production`, which loads [`appsettings.Production.json`](../../src/Region42.ScoresStandings.VolunteerSync/appsettings.Production.json) (production API URL, source app paths, etc.). Cloud Run env vars and secrets override JSON values when set.
-
-Set `VolunteerSync__DryRun=false` once source app mapping is complete and dry-run validation passes.
-
-### 4. Cloud Scheduler
-
-```powershell
-gcloud scheduler jobs create http region42-volunteer-sync-weekly `
-  --location=us-central1 `
-  --schedule="0 6 * * 1" `
-  --time-zone="America/Los_Angeles" `
-  --uri="https://us-central1-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/ayso-region-42/jobs/region42-volunteer-sync:run" `
-  --http-method=POST `
-  --oauth-service-account-email=region42-volunteer-sync@ayso-region-42.iam.gserviceaccount.com
-```
-
-Adjust the cron expression to match when the source volunteer app publishes updated exports.
-
-## Source app integration (TODO)
-
-The following are stubbed until the external volunteer app format is documented:
-
-- `VolunteerPointsSourceClient` — login form field names and download URL
-- `VolunteerPointsExcelParser` — worksheet/column mapping
-- `VolunteerPointsTeamMatcher` — external team name → internal `TeamId` lookup
 
 ## Local development
 
-Run the web app locally and POST JSON directly:
 
-```powershell
-cd src/Region42.ScoresStandings.Web
-dotnet run
-```
-
-For JWT validation in development, set `Authentication:ServiceAccount:JwtAudience` to your local HTTPS URL or test via unit/integration tests with mocked auth.
-
-Run the sync job locally (uses `appsettings.json`; Development is the default environment):
 
 ```powershell
 cd src/Region42.ScoresStandings.VolunteerSync
+# Same UserSecretsId as the Web project — secrets can be set from either project directory.
+dotnet user-secrets set "VolunteerSync:SourceUsername" "<userid>"
+dotnet user-secrets set "VolunteerSync:SourcePassword" "<password>"
 dotnet run
 ```
 
-To test production settings locally:
+`dotnet run` uses **Development** via `Properties/launchSettings.json` (`DOTNET_ENVIRONMENT=Development`), so `appsettings.Production.json` is not loaded and user secrets are merged into configuration. If you run the built `.exe` directly, set `$env:DOTNET_ENVIRONMENT = "Development"` first.
 
-```powershell
-$env:DOTNET_ENVIRONMENT = "Production"
-dotnet run
-```
+For **local DEBUG** builds, import APIs use `[AllowAnonymous]` and the sync job calls the API **without** a bearer token, so you can exercise download → parse → dry-run import without gcloud or IAM impersonation. Run the web app and VolunteerSync in **Debug** configuration (default for `dotnet run` / F5).
 
-Or use user secrets / env vars to override individual `VolunteerSync__*` settings without changing JSON files.
+Imports are recorded as `volunteer-sync-local` when no JWT is present. **Release/Production builds** require the service-account JWT policy (metadata server on Cloud Run; optional `VolunteerSync:TargetIdentityToken` to test auth locally).
+
+To verify JWT auth in DEBUG, set `VolunteerSync:TargetIdentityToken` in user secrets (from `gcloud auth print-identity-token --audiences=<TargetApiBaseUrl>`, with or without service-account impersonation if you have `roles/iam.serviceAccountTokenCreator`).
+
+
 
 ## Concurrency
 
+
+
 - **Write lock:** coarse-grained mutex for bulk import; 15-minute TTL handles crashed jobs.
+
 - **Generation-based optimistic concurrency:** still applies to division JSON files on save (existing behavior).
 
+
+
 If an admin attempts to save volunteer points while a sync lock is held, the grid POST shows: *"A volunteer points import is currently in progress. Please try again shortly."*
+

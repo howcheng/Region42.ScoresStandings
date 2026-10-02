@@ -1,9 +1,11 @@
 using Microsoft.Extensions.Logging;
 using Region42.ScoresStandings.Application.DTOs;
 using Region42.ScoresStandings.Application.Exceptions;
+using Region42.ScoresStandings.Application.Helpers;
 using Region42.ScoresStandings.Application.Interfaces;
 using Region42.ScoresStandings.Domain;
 using Region42.ScoresStandings.Domain.Entities;
+using Region42.ScoresStandings.Domain.Helpers;
 using Region42.ScoresStandings.Domain.Interfaces;
 
 namespace Region42.ScoresStandings.Application.Services;
@@ -19,6 +21,8 @@ public class VolunteerPointsService : IVolunteerPointsService
 	private readonly IRepository<VolunteerPoints> _volunteerPointsRepository;
 	private readonly IRepository<Team> _teamRepository;
 	private readonly IRepository<Division> _divisionRepository;
+	private readonly ISeasonService _seasonService;
+	private readonly IGameService _gameService;
 	private readonly IStandingsRefreshService _standingsRefreshService;
 	private readonly IStorageWriteLock _storageWriteLock;
 	private readonly ILogger<VolunteerPointsService> _logger;
@@ -27,6 +31,8 @@ public class VolunteerPointsService : IVolunteerPointsService
 		IRepository<VolunteerPoints> volunteerPointsRepository,
 		IRepository<Team> teamRepository,
 		IRepository<Division> divisionRepository,
+		ISeasonService seasonService,
+		IGameService gameService,
 		IStandingsRefreshService standingsRefreshService,
 		IStorageWriteLock storageWriteLock,
 		ILogger<VolunteerPointsService> logger)
@@ -34,6 +40,8 @@ public class VolunteerPointsService : IVolunteerPointsService
 		_volunteerPointsRepository = volunteerPointsRepository;
 		_teamRepository = teamRepository;
 		_divisionRepository = divisionRepository;
+		_seasonService = seasonService;
+		_gameService = gameService;
 		_standingsRefreshService = standingsRefreshService;
 		_storageWriteLock = storageWriteLock;
 		_logger = logger;
@@ -78,7 +86,7 @@ public class VolunteerPointsService : IVolunteerPointsService
 		return points;
 	}
 
-	public async Task<VolunteerPoints> EnterOrUpdateVolunteerPointsAsync(int teamId, int round, int points, string notes)
+	public async Task<VolunteerPoints> EnterOrUpdateVolunteerPointsAsync(int teamId, int round, decimal points, string notes)
 	{
 		_logger.LogInformation("Entering/updating volunteer points for team {TeamId}, round {Round}: Points={Points}",
 			teamId, round, points);
@@ -123,6 +131,7 @@ public class VolunteerPointsService : IVolunteerPointsService
 		VolunteerPointsBulkUpdateDto request,
 		bool dryRun,
 		string importedBy,
+		bool authoritativeSync = false,
 		CancellationToken cancellationToken = default)
 	{
 		ArgumentNullException.ThrowIfNull(request);
@@ -160,14 +169,25 @@ public class VolunteerPointsService : IVolunteerPointsService
 
 		try
 		{
-			var teamsInDivision = (await _teamRepository.FindAsync(t => t.DivisionId == request.DivisionId))
-				.ToDictionary(t => t.Id);
+			var teamsInDivisionList = (await _teamRepository.FindAsync(t => t.DivisionId == request.DivisionId)).ToList();
+			var teamsInDivision = teamsInDivisionList.ToDictionary(t => t.Id);
 
 			var validEntries = new List<(VolunteerPointsEntryDto Entry, Team Team)>();
+			var payloadKeys = new HashSet<(int TeamId, int Round)>();
 
 			foreach (var entry in request.Entries)
 			{
-				if (entry.TeamId <= 0)
+				var teamId = entry.TeamId;
+				if (teamId <= 0 && !string.IsNullOrWhiteSpace(entry.TeamName))
+				{
+					var matched = VolunteerPointsTeamNameMatcher.TryMatch(entry.TeamName, teamsInDivisionList);
+					if (matched != null)
+					{
+						teamId = matched.Id;
+					}
+				}
+
+				if (teamId <= 0)
 				{
 					result.SkippedCount++;
 					if (!string.IsNullOrWhiteSpace(entry.TeamName))
@@ -182,11 +202,11 @@ public class VolunteerPointsService : IVolunteerPointsService
 					continue;
 				}
 
-				if (!teamsInDivision.TryGetValue(entry.TeamId, out var team))
+				if (!teamsInDivision.TryGetValue(teamId, out var team))
 				{
 					result.SkippedCount++;
 					result.ValidationErrors.Add(
-						$"Team {entry.TeamId} is not in division {request.DivisionId}.");
+						$"Team {teamId} is not in division {request.DivisionId}.");
 					continue;
 				}
 
@@ -222,13 +242,41 @@ public class VolunteerPointsService : IVolunteerPointsService
 					continue;
 				}
 
-				validEntries.Add((entry, team));
+				payloadKeys.Add((teamId, entry.Round));
+				validEntries.Add((new VolunteerPointsEntryDto
+				{
+					TeamId = teamId,
+					TeamName = entry.TeamName,
+					Round = entry.Round,
+					Points = entry.Points,
+					Notes = entry.Notes
+				}, team));
+			}
+
+			var staleZeroEntries = new List<(int TeamId, int Round)>();
+			if (authoritativeSync)
+			{
+				var existingInDivision = await GetVolunteerPointsByDivisionAsync(request.DivisionId);
+				foreach (var existing in existingInDivision)
+				{
+					if (!IsSyncOwnedRecord(existing.ModifiedBy, importedBy))
+					{
+						continue;
+					}
+
+					var key = (existing.TeamId, existing.Round);
+					if (!payloadKeys.Contains(key))
+					{
+						staleZeroEntries.Add(key);
+					}
+				}
 			}
 
 			if (dryRun)
 			{
 				result.ImportedCount = validEntries.Count;
-				if (validEntries.Count > 0)
+				result.StaleZeroedCount = staleZeroEntries.Count;
+				if (validEntries.Count > 0 || staleZeroEntries.Count > 0)
 				{
 					result.AffectedDivisionIds.Add(request.DivisionId);
 				}
@@ -242,11 +290,18 @@ public class VolunteerPointsService : IVolunteerPointsService
 					? $"Imported by {importedBy} on {DateTime.UtcNow:yyyy-MM-dd}"
 					: entry.Notes;
 
-				await UpsertVolunteerPointsWithoutSaveAsync(entry.TeamId, entry.Round, entry.Points, notes);
+				await UpsertVolunteerPointsWithoutSaveAsync(entry.TeamId, entry.Round, entry.Points, notes, importedBy);
 				result.ImportedCount++;
 			}
 
-			if (result.ImportedCount > 0)
+			foreach (var (teamId, round) in staleZeroEntries)
+			{
+				var notes = $"Cleared by authoritative sync ({importedBy}) on {DateTime.UtcNow:yyyy-MM-dd}";
+				await UpsertVolunteerPointsWithoutSaveAsync(teamId, round, 0, notes, importedBy);
+				result.StaleZeroedCount++;
+			}
+
+			if (result.ImportedCount > 0 || result.StaleZeroedCount > 0)
 			{
 				await _standingsRefreshService.RefreshDivisionStandingsAsync(request.DivisionId);
 				await _volunteerPointsRepository.SaveChangesAsync();
@@ -254,9 +309,10 @@ public class VolunteerPointsService : IVolunteerPointsService
 			}
 
 			_logger.LogInformation(
-				"Bulk volunteer points import completed for division {DivisionId}: imported={Imported}, skipped={Skipped}, by={ImportedBy}",
+				"Bulk volunteer points import completed for division {DivisionId}: imported={Imported}, zeroed={Zeroed}, skipped={Skipped}, by={ImportedBy}",
 				request.DivisionId,
 				result.ImportedCount,
+				result.StaleZeroedCount,
 				result.SkippedCount,
 				importedBy);
 
@@ -269,6 +325,48 @@ public class VolunteerPointsService : IVolunteerPointsService
 				await lockHandle.DisposeAsync();
 			}
 		}
+	}
+
+	public async Task<VolunteerPointsSyncContextDto> GetSyncContextAsync(CancellationToken cancellationToken = default)
+	{
+		var season = await _seasonService.GetActiveSeasonAsync();
+		if (season == null)
+		{
+			return new VolunteerPointsSyncContextDto();
+		}
+
+		var divisions = await _divisionRepository.FindAsync(d => d.SeasonId == season.Id);
+		var context = new VolunteerPointsSyncContextDto
+		{
+			SeasonId = season.Id,
+			SeasonYear = season.Year
+		};
+
+		foreach (var division in divisions.OrderBy(d => d.AgeGroup).ThenBy(d => d.Gender))
+		{
+			var teams = (await _teamRepository.FindAsync(t => t.DivisionId == division.Id && t.IsActive))
+				.OrderBy(t => t.Name)
+				.ToList();
+
+			var games = await _gameService.GetGamesByDivisionAsync(division.Id);
+			var roundByDate = GameRoundCalculator.BuildRoundByDateMap(games.Select(g => g.ScheduledDateTime));
+
+			context.Divisions.Add(new VolunteerPointsSyncDivisionDto
+			{
+				DivisionId = division.Id,
+				CgiDivisionCode = DivisionKeyHelper.ToCgiSportsDivisionCode(division.AgeGroup, division.Gender),
+				TotalRounds = division.TotalRounds,
+				RoundByDate = new Dictionary<string, int>(roundByDate, StringComparer.Ordinal),
+				Teams = teams.Select(t => new VolunteerPointsSyncTeamDto
+				{
+					TeamId = t.Id,
+					Name = t.Name,
+					ShortName = t.ShortName
+				}).ToList()
+			});
+		}
+
+		return context;
 	}
 
 	public Task<bool> IsVolunteerPointsImportLockedAsync(CancellationToken cancellationToken = default)
@@ -324,7 +422,12 @@ public class VolunteerPointsService : IVolunteerPointsService
 		return true;
 	}
 
-	private async Task UpsertVolunteerPointsWithoutSaveAsync(int teamId, int round, int points, string notes)
+	private async Task UpsertVolunteerPointsWithoutSaveAsync(
+		int teamId,
+		int round,
+		decimal points,
+		string notes,
+		string modifiedBy)
 	{
 		var existingPoints = await _volunteerPointsRepository.FindAsync(vp =>
 			vp.TeamId == teamId && vp.Round == round);
@@ -334,6 +437,8 @@ public class VolunteerPointsService : IVolunteerPointsService
 		{
 			existing.Points = points;
 			existing.Notes = notes;
+			existing.ModifiedBy = modifiedBy;
+			existing.ModifiedAt = DateTime.UtcNow;
 			_volunteerPointsRepository.Update(existing);
 			return;
 		}
@@ -343,8 +448,27 @@ public class VolunteerPointsService : IVolunteerPointsService
 			TeamId = teamId,
 			Round = round,
 			Points = points,
-			Notes = notes
+			Notes = notes,
+			ModifiedBy = modifiedBy,
+			ModifiedAt = DateTime.UtcNow,
+			CreatedBy = modifiedBy,
+			CreatedAt = DateTime.UtcNow
 		});
+	}
+
+	private static bool IsSyncOwnedRecord(string modifiedBy, string importedBy)
+	{
+		if (string.IsNullOrWhiteSpace(modifiedBy))
+		{
+			return false;
+		}
+
+		if (modifiedBy.Contains("volunteer-sync", StringComparison.OrdinalIgnoreCase))
+		{
+			return true;
+		}
+
+		return string.Equals(modifiedBy, importedBy, StringComparison.OrdinalIgnoreCase);
 	}
 
 	private async Task RefreshStandingsAndSaveAsync(int divisionId)
@@ -371,7 +495,7 @@ public class VolunteerPointsService : IVolunteerPointsService
 		return team;
 	}
 
-	private void ValidateRoundAndPoints(int round, int points, int teamId)
+	private void ValidateRoundAndPoints(int round, decimal points, int teamId)
 	{
 		if (round < 1)
 		{
