@@ -1,9 +1,13 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
+COPY src/Region42.ScoresStandings.Domain/Region42.ScoresStandings.Domain.csproj src/Region42.ScoresStandings.Domain/
+COPY src/Region42.ScoresStandings.Application/Region42.ScoresStandings.Application.csproj src/Region42.ScoresStandings.Application/
 COPY src/Region42.ScoresStandings.VolunteerSync/Region42.ScoresStandings.VolunteerSync.csproj src/Region42.ScoresStandings.VolunteerSync/
 RUN dotnet restore src/Region42.ScoresStandings.VolunteerSync/Region42.ScoresStandings.VolunteerSync.csproj
 
+COPY src/Region42.ScoresStandings.Domain/ src/Region42.ScoresStandings.Domain/
+COPY src/Region42.ScoresStandings.Application/ src/Region42.ScoresStandings.Application/
 COPY src/Region42.ScoresStandings.VolunteerSync/ src/Region42.ScoresStandings.VolunteerSync/
 RUN dotnet publish src/Region42.ScoresStandings.VolunteerSync/Region42.ScoresStandings.VolunteerSync.csproj -c Release -o /app/publish /p:UseAppHost=false
 
