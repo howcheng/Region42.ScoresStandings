@@ -144,12 +144,7 @@ public class VolunteerPointsSourceClient : IVolunteerPointsSourceClient
 
 	private Uri BuildUri(string path)
 	{
-		if (Uri.TryCreate(path, UriKind.Absolute, out var absoluteUri))
-		{
-			return absoluteUri;
-		}
-
-		return new Uri(new Uri(_options.SourceBaseUrl.TrimEnd('/') + "/"), path.TrimStart('/'));
+		return CgiSportsUriHelper.Combine(_options.SourceBaseUrl, path);
 	}
 
 	private static string TruncateForLog(string sessionUser)

@@ -16,6 +16,11 @@ if (builder.Environment.IsDevelopment())
 
 builder.Services.Configure<VolunteerSyncOptions>(
 	builder.Configuration.GetSection(VolunteerSyncOptions.SectionName));
+builder.Services.PostConfigure<VolunteerSyncOptions>(options =>
+{
+	options.SourceUsername = options.SourceUsername.Trim();
+	options.SourcePassword = options.SourcePassword.Trim();
+});
 
 builder.Services.AddHttpClient();
 builder.Services.AddHttpClient(nameof(ScoresStandingsApiClient));
