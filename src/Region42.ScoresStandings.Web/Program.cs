@@ -79,6 +79,7 @@ builder.Services.AddAuthentication(options =>
 })
 .AddJwtBearer("Bearer", options =>
 {
+	options.MapInboundClaims = false;
 	options.Authority = "https://accounts.google.com";
 	options.TokenValidationParameters = new TokenValidationParameters
 	{
