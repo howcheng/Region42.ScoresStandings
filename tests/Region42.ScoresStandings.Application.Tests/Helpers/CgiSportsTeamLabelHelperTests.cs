@@ -15,4 +15,16 @@ public class CgiSportsTeamLabelHelperTests
 	{
 		CgiSportsTeamLabelHelper.TeamLabelAppliesToDivision(team, division).Should().Be(expected);
 	}
+
+	[Theory]
+	[InlineData("12UB02 (Landes)", "12UB", true)]
+	[InlineData("10UB04 (Timen)", "10UB", true)]
+	[InlineData("Cassaro", "", false)]
+	[InlineData("R121A Bulls (Subramanian)", "", false)]
+	public void TryGetLeadingDivisionCode_ParsesTeamLabelPrefix(string team, string expectedCode, bool expectedSuccess)
+	{
+		var success = CgiSportsTeamLabelHelper.TryGetLeadingDivisionCode(team, out var code);
+		success.Should().Be(expectedSuccess);
+		code.Should().Be(expectedCode);
+	}
 }

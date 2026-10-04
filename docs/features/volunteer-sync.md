@@ -12,7 +12,7 @@ Automated volunteer points import from the cgisports referee assignment log into
 
 - **Cloud Scheduler** triggers a **Cloud Run Job** (`region42-volunteer-sync`) on a cron schedule.
 
-- The job downloads the legacy **`.xls` assignment log** from cgisports, parses the **`team_log`** sheet, and POSTs per-division payloads to the web app API.
+- The job downloads the legacy **`.xls` assignment log** from cgisports, parses the **`team_points_wk`** sheet (team, game week, **Allowed** weekly credit), and POSTs per-division payloads to the web app API.
 
 - **All business logic** (validation, team name matching, authoritative reconciliation, standings refresh, storage writes) runs in the web app via `POST /api/volunteer-points/import`.
 
@@ -77,6 +77,36 @@ Request body: `VolunteerPointsBulkUpdateDto`
 Volunteer points support **half increments** (`0.5`) as `decimal` values.
 
 **Team labels:** cgisports uses short names like `10UB04 (Timen)`; the API resolves them to roster names via `VolunteerPointsTeamNameMatcher` (division + team number, bare `10UB04`, or team number alone such as `04` within the division import). Labels that are only letters (likely a coach last name with no team number) are **not** auto-matched because roster names use full coach names and false positives are too likely. When preparing a division import, rows whose label starts with another division code (for example `12UB02` under the `10UB` column) are dropped. Any remaining unmatched labels are logged by the sync job; the run continues.
+
+
+
+## cgisports export worksheet
+
+
+
+The assignment log `.xls` includes several sheets. The sync job reads **`team_points_wk`** only:
+
+
+
+| Column | Use |
+
+|--------|-----|
+
+| **Team** | cgisports label (for example `12UB02 (Landes)`) |
+
+| **Week Of** | Game date for that week → mapped to standings round via sync context |
+
+| **Earned** | Raw assignment total (informational; not imported) |
+
+| **Allowed** | Weekly credit that counts toward standings (**imported value**) |
+
+
+
+Division code (`12UB`, `10UG`, …) is taken from the **team label prefix**, not from any column in this sheet.
+
+
+
+Do **not** import from **`team_log`**: each row is one referee assignment, and its **Division** column is the division of the **game worked**, not the volunteering team’s division. Using that sheet mis-assigns or drops rows (for example `12UB02` assignments filed under `10UG` never import into 12U Boys).
 
 
 

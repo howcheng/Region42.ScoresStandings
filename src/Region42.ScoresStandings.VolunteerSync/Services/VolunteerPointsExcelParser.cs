@@ -1,6 +1,7 @@
 using System.Globalization;
 using ExcelDataReader;
 using Microsoft.Extensions.Logging;
+using Region42.ScoresStandings.Application.Helpers;
 using Region42.ScoresStandings.VolunteerSync.Interfaces;
 using Region42.ScoresStandings.VolunteerSync.Models;
 
@@ -8,6 +9,8 @@ namespace Region42.ScoresStandings.VolunteerSync.Services;
 
 public class VolunteerPointsExcelParser : IVolunteerPointsFileParser
 {
+	private const string TeamPointsWorksheetName = "team_points_wk";
+
 	private readonly ILogger<VolunteerPointsExcelParser> _logger;
 
 	public VolunteerPointsExcelParser(ILogger<VolunteerPointsExcelParser> logger)
@@ -24,8 +27,9 @@ public class VolunteerPointsExcelParser : IVolunteerPointsFileParser
 		using var reader = ExcelReaderFactory.CreateReader(fileStream);
 		var dataSet = reader.AsDataSet();
 		var table = dataSet.Tables.Cast<System.Data.DataTable>()
-			.FirstOrDefault(t => t.TableName.Equals("team_log", StringComparison.OrdinalIgnoreCase))
-			?? throw new InvalidOperationException("Volunteer points export is missing the team_log worksheet.");
+			.FirstOrDefault(t => t.TableName.Equals(TeamPointsWorksheetName, StringComparison.OrdinalIgnoreCase))
+			?? throw new InvalidOperationException(
+				$"Volunteer points export is missing the {TeamPointsWorksheetName} worksheet.");
 
 		if (table.Rows.Count == 0)
 		{
@@ -36,42 +40,66 @@ public class VolunteerPointsExcelParser : IVolunteerPointsFileParser
 		var columnIndex = BuildColumnIndex(headerRow);
 		ValidateRequiredColumns(columnIndex);
 
-		var aggregated = new Dictionary<(string Division, string Team, DateTime Date), decimal>();
+		var rows = new List<VolunteerPointsRawRow>();
 
 		for (var rowIndex = 1; rowIndex < table.Rows.Count; rowIndex++)
 		{
 			var row = table.Rows[rowIndex];
-			var division = GetString(row, columnIndex["Division"]);
 			var team = GetString(row, columnIndex["Team"]);
-			if (string.IsNullOrWhiteSpace(division) || string.IsNullOrWhiteSpace(team))
+			if (string.IsNullOrWhiteSpace(team))
 			{
 				continue;
 			}
 
-			if (!TryParseDate(row[columnIndex["Date"]], out var date))
+			if (!TryGetLeadingDivisionCode(team, out var divisionCode))
 			{
-				_logger.LogWarning("Skipping team_log row {RowIndex}: invalid date", rowIndex + 1);
+				_logger.LogWarning(
+					"Skipping team_points_wk row {RowIndex}: cannot determine division for team {Team}",
+					rowIndex + 1,
+					team);
 				continue;
 			}
 
-			var points = ParsePoints(row[columnIndex["Points Earned"]]);
+			if (!TryParseDate(row[columnIndex["Week Of"]], out var date))
+			{
+				_logger.LogWarning(
+					"Skipping team_points_wk row {RowIndex}: invalid week-of date for team {Team}",
+					rowIndex + 1,
+					team);
+				continue;
+			}
+
+			var points = ParsePoints(row[columnIndex["Allowed"]]);
 			if (points < 0)
 			{
-				_logger.LogWarning("Skipping team_log row {RowIndex}: negative points", rowIndex + 1);
+				_logger.LogWarning(
+					"Skipping team_points_wk row {RowIndex}: negative allowed points for team {Team}",
+					rowIndex + 1,
+					team);
 				continue;
 			}
 
-			var key = (division.Trim(), team.Trim(), date.Date);
-			aggregated[key] = aggregated.GetValueOrDefault(key) + points;
+			rows.Add(new VolunteerPointsRawRow
+			{
+				DivisionCode = divisionCode,
+				Team = team.Trim(),
+				Date = date.Date,
+				Points = points
+			});
 		}
 
-		return aggregated.Select(kvp => new VolunteerPointsRawRow
+		return rows;
+	}
+
+	private static bool TryGetLeadingDivisionCode(string teamLabel, out string cgiDivisionCode)
+	{
+		if (VolunteerPointsTeamNameMatcher.IsLikelyCoachNameOnly(teamLabel))
 		{
-			DivisionCode = kvp.Key.Division,
-			Team = kvp.Key.Team,
-			Date = kvp.Key.Date,
-			Points = kvp.Value
-		}).ToList();
+			cgiDivisionCode = string.Empty;
+			return false;
+		}
+
+		return CgiSportsTeamLabelHelper.TryGetLeadingDivisionCode(teamLabel, out cgiDivisionCode);
 	}
 
 	private static Dictionary<string, int> BuildColumnIndex(System.Data.DataRow headerRow)
@@ -91,7 +119,7 @@ public class VolunteerPointsExcelParser : IVolunteerPointsFileParser
 
 	private static void ValidateRequiredColumns(IReadOnlyDictionary<string, int> columnIndex)
 	{
-		foreach (var required in new[] { "Team", "Date", "Points Earned", "Division" })
+		foreach (var required in new[] { "Team", "Week Of", "Allowed" })
 		{
 			if (!columnIndex.ContainsKey(required))
 			{
