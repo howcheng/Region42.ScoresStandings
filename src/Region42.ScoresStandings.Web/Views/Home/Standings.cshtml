@@ -42,11 +42,11 @@
 		<i class="bi bi-info-circle-fill"></i>
 		@if (Model.ScrimmageRoundsInRange == 1)
 		{
-			<span>Round 1 is a scrimmage and does not count toward standings. Only volunteer points from that round are included below.</span>
+			<span>Round 1 is a scrimmage and does not count toward standings. Only referee points from that round are included below.</span>
 		}
 		else
 		{
-			<span>Rounds 1&ndash;@Model.ScrimmageRoundsInRange are scrimmages and do not count toward standings. Only volunteer points from those rounds are included below.</span>
+			<span>Rounds 1&ndash;@Model.ScrimmageRoundsInRange are scrimmages and do not count toward standings. Only referee points from those rounds are included below.</span>
 		}
 	</div>
 }
@@ -202,9 +202,9 @@
 										<i class="bi bi-trophy-fill"></i>
 										<span class="d-none d-lg-inline">GP</span>
 									</th>
-									<th class="text-center d-none d-md-table-cell points-detail" title="Volunteer Points">
-										<i class="bi bi-hand-thumbs-up-fill"></i>
-										<span class="d-none d-lg-inline">VP</span>
+									<th class="text-center d-none d-md-table-cell points-detail" title="Referee Points">
+										<partial name="_RefereeWhistleIcon" />
+										<span class="d-none d-lg-inline">RP</span>
 									</th>
 									<th class="text-center">
 										<strong title="Total Points">Pts</strong>
@@ -295,7 +295,7 @@ else if (Model.DivisionId > 0)
 							<td class="text-end"><strong id="modalGamePoints"></strong></td>
 						</tr>
 						<tr>
-							<td><i class="bi bi-hand-thumbs-up-fill"></i> Volunteer Points:</td>
+							<td><partial name="_RefereeWhistleIcon" /> Referee Points:</td>
 							<td class="text-end"><strong id="modalVolunteerPoints"></strong></td>
 						</tr>
 						<tr class="table-active">
@@ -318,7 +318,7 @@ else if (Model.DivisionId > 0)
 				<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
 			</div>
 			<div class="modal-body">
-				<p><strong>Total Points</strong> = Game Points + Volunteer Points</p>
+				<p><strong>Total Points</strong> = Game Points + Referee Points</p>
 				<hr />
 				<p class="mb-2"><strong>Game Points:</strong></p>
 				<ul>
@@ -326,9 +326,9 @@ else if (Model.DivisionId > 0)
 					<li>Draw: 1 point</li>
 					<li>Loss: 0 points</li>
 				</ul>
-				<p class="mb-2"><strong>Volunteer Points:</strong></p>
+				<p class="mb-2"><strong>Referee Points:</strong></p>
 				<ul>
-					<li>Awarded for volunteer activities</li>
+					<li>Awarded for referee duties</li>
 					<li>Added to game points</li>
 				</ul>
 				<p class="text-muted mb-0">

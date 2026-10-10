@@ -128,7 +128,7 @@ public class VolunteerPointsController : Controller
 
 		if (await _volunteerPointsService.IsVolunteerPointsImportLockedAsync())
 		{
-			TempData["ErrorMessage"] = "A volunteer points import is currently in progress. Please try again shortly.";
+			TempData["ErrorMessage"] = "A referee points import is currently in progress. Please try again shortly.";
 			return RedirectToAction(nameof(Entry), new { seasonId = model.SeasonId, divisionId = model.DivisionId });
 		}
 
@@ -166,7 +166,7 @@ public class VolunteerPointsController : Controller
 
 		if (successCount > 0)
 		{
-			TempData["SuccessMessage"] = $"{successCount} volunteer points entry/entries saved successfully.";
+			TempData["SuccessMessage"] = $"{successCount} referee points entry/entries saved successfully.";
 		}
 
 		if (errorCount > 0)

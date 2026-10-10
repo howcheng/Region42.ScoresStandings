@@ -1,7 +1,7 @@
 @model Region42.ScoresStandings.Web.Controllers.VolunteerPointsGridViewModel
 
 @{
-	ViewData["Title"] = "Volunteer Points Entry";
+	ViewData["Title"] = "Referee Points Entry";
 	var seasons = ViewBag.Seasons as SelectList;
 	var divisions = ViewBag.Divisions as SelectList;
 }
@@ -10,7 +10,7 @@
 	<link rel="stylesheet" href="~/css/volunteer-points.css" asp-append-version="true" />
 }
 
-<h2>Volunteer Points Entry</h2>
+<h2><partial name="_RefereeWhistleIcon" /> Referee Points Entry</h2>
 <hr />
 
 @if (!string.IsNullOrEmpty(ViewBag.ErrorMessage))
@@ -135,8 +135,8 @@
 	<div class="alert alert-info mt-4" role="alert">
 		<strong>Instructions:</strong>
 		<ul class="mb-0">
-			<li>Enter volunteer points for each team in each round.</li>
-			<li>Empty fields or zero values mean no volunteer points for that round.</li>
+			<li>Enter referee points for each team in each round.</li>
+			<li>Empty fields or zero values mean no referee points for that round.</li>
 			<li>You can edit points for any team in any week for error correction.</li>
 			<li>All changes are saved when you click "Save All Points".</li>
 		</ul>
@@ -151,7 +151,7 @@ else if (Model != null && Model.DivisionId > 0)
 else
 {
 	<div class="alert alert-info" role="alert">
-		Please select a division to view and enter volunteer points.
+		Please select a division to view and enter referee points.
 	</div>
 }
 
