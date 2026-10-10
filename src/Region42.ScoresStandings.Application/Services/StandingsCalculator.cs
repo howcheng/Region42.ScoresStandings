@@ -212,7 +212,7 @@ public static class StandingsCalculator
 
 	private static string FormatVolunteerPointsNeeded(decimal needed, string suffix)
 	{
-		var formatted = needed == 1m ? "1 more volunteer point" : $"{needed:G29} more volunteer points";
+		var formatted = needed == 1m ? "1 more referee point" : $"{needed:G29} more referee points";
 		return $"Needs {formatted} {suffix}";
 	}
 }

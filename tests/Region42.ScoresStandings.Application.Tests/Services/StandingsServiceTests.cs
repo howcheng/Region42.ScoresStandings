@@ -720,7 +720,7 @@ public class StandingsServiceTests
 
 		var team3Standing = result.Standings.First(s => s.TeamId == team3.Id);
 		team3Standing.QualifiesForPlayoffs.Should().BeFalse();
-		team3Standing.PlayoffQualificationNote.Should().Be("Needs 1 more volunteer point and must improve standing");
+		team3Standing.PlayoffQualificationNote.Should().Be("Needs 1 more referee point and must improve standing");
 	}
 
 	[Fact]
@@ -763,7 +763,7 @@ public class StandingsServiceTests
 
 		var team2Standing = result.Standings.First(s => s.TeamId == team2.Id);
 		team2Standing.QualifiesForPlayoffs.Should().BeFalse();
-		team2Standing.PlayoffQualificationNote.Should().Be("Needs 2 more volunteer points to qualify");
+		team2Standing.PlayoffQualificationNote.Should().Be("Needs 2 more referee points to qualify");
 	}
 
 	[Fact]
