@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using Region42.ScoresStandings.Application.DTOs;
 using Region42.ScoresStandings.Application.Exceptions;
 using Region42.ScoresStandings.Application.Helpers;
@@ -21,6 +21,7 @@ public class VolunteerPointsService : IVolunteerPointsService
 	private readonly IRepository<VolunteerPoints> _volunteerPointsRepository;
 	private readonly IRepository<Team> _teamRepository;
 	private readonly IRepository<Division> _divisionRepository;
+	private readonly IRepository<Settings>? _settingsRepository;
 	private readonly ISeasonService _seasonService;
 	private readonly IGameService _gameService;
 	private readonly IStandingsRefreshService _standingsRefreshService;
@@ -35,11 +36,13 @@ public class VolunteerPointsService : IVolunteerPointsService
 		IGameService gameService,
 		IStandingsRefreshService standingsRefreshService,
 		IStorageWriteLock storageWriteLock,
-		ILogger<VolunteerPointsService> logger)
+		ILogger<VolunteerPointsService> logger,
+		IRepository<Settings>? settingsRepository = null)
 	{
 		_volunteerPointsRepository = volunteerPointsRepository;
 		_teamRepository = teamRepository;
 		_divisionRepository = divisionRepository;
+		_settingsRepository = settingsRepository;
 		_seasonService = seasonService;
 		_gameService = gameService;
 		_standingsRefreshService = standingsRefreshService;
@@ -254,12 +257,14 @@ public class VolunteerPointsService : IVolunteerPointsService
 			}
 
 			var staleZeroEntries = new List<(int TeamId, int Round)>();
+			var maxPointsPerSeason = await GetMaxVolunteerPointsPerSeasonAsync();
+			var existingInDivision = (await GetVolunteerPointsByDivisionAsync(request.DivisionId)).ToList();
+
 			if (authoritativeSync)
 			{
-				var existingInDivision = await GetVolunteerPointsByDivisionAsync(request.DivisionId);
 				foreach (var existing in existingInDivision)
 				{
-					if (!IsSyncOwnedRecord(existing.ModifiedBy, importedBy))
+					if (!IsSyncOwnedRecord(existing, importedBy))
 					{
 						continue;
 					}
@@ -272,11 +277,17 @@ public class VolunteerPointsService : IVolunteerPointsService
 				}
 			}
 
+			var clampedExistingEntries = FindOverCapStoredEntries(
+				existingInDivision,
+				validEntries,
+				staleZeroEntries,
+				maxPointsPerSeason);
+
 			if (dryRun)
 			{
 				result.ImportedCount = validEntries.Count;
-				result.StaleZeroedCount = staleZeroEntries.Count;
-				if (validEntries.Count > 0 || staleZeroEntries.Count > 0)
+				result.StaleZeroedCount = staleZeroEntries.Count + clampedExistingEntries.Count;
+				if (validEntries.Count > 0 || staleZeroEntries.Count > 0 || clampedExistingEntries.Count > 0)
 				{
 					result.AffectedDivisionIds.Add(request.DivisionId);
 				}
@@ -298,6 +309,13 @@ public class VolunteerPointsService : IVolunteerPointsService
 			{
 				var notes = $"Cleared by authoritative sync ({importedBy}) on {DateTime.UtcNow:yyyy-MM-dd}";
 				await UpsertVolunteerPointsWithoutSaveAsync(teamId, round, 0, notes, importedBy);
+				result.StaleZeroedCount++;
+			}
+
+			foreach (var (teamId, round, clampedPoints) in clampedExistingEntries)
+			{
+				var notes = $"Capped to season maximum ({maxPointsPerSeason:G29}) by {importedBy} on {DateTime.UtcNow:yyyy-MM-dd}";
+				await UpsertVolunteerPointsWithoutSaveAsync(teamId, round, clampedPoints, notes, importedBy);
 				result.StaleZeroedCount++;
 			}
 
@@ -336,10 +354,12 @@ public class VolunteerPointsService : IVolunteerPointsService
 		}
 
 		var divisions = await _divisionRepository.FindAsync(d => d.SeasonId == season.Id);
+		var maxPointsPerSeason = await GetMaxVolunteerPointsPerSeasonAsync();
 		var context = new VolunteerPointsSyncContextDto
 		{
 			SeasonId = season.Id,
-			SeasonYear = season.Year
+			SeasonYear = season.Year,
+			MaxVolunteerPointsPerSeason = maxPointsPerSeason
 		};
 
 		foreach (var division in divisions.OrderBy(d => d.AgeGroup).ThenBy(d => d.Gender))
@@ -456,19 +476,122 @@ public class VolunteerPointsService : IVolunteerPointsService
 		});
 	}
 
-	private static bool IsSyncOwnedRecord(string modifiedBy, string importedBy)
+	private async Task<decimal> GetMaxVolunteerPointsPerSeasonAsync()
 	{
-		if (string.IsNullOrWhiteSpace(modifiedBy))
+		if (_settingsRepository == null)
 		{
-			return false;
+			return 0m;
 		}
 
-		if (modifiedBy.Contains("volunteer-sync", StringComparison.OrdinalIgnoreCase))
+		var allSettings = await _settingsRepository.GetAllAsync();
+		return allSettings.FirstOrDefault()?.MaxVolunteerPointsPerSeason ?? 0m;
+	}
+
+	private static List<(int TeamId, int Round, decimal ClampedPoints)> FindOverCapStoredEntries(
+		IReadOnlyList<VolunteerPoints> existingInDivision,
+		List<(VolunteerPointsEntryDto Entry, Team Team)> validEntries,
+		List<(int TeamId, int Round)> staleZeroEntries,
+		decimal maxPointsPerSeason)
+	{
+		if (maxPointsPerSeason <= 0m)
 		{
-			return true;
+			return new List<(int TeamId, int Round, decimal ClampedPoints)>();
 		}
 
-		return string.Equals(modifiedBy, importedBy, StringComparison.OrdinalIgnoreCase);
+		var staleZeroSet = staleZeroEntries.ToHashSet();
+		var validByKey = new Dictionary<(int TeamId, int Round), VolunteerPointsEntryDto>();
+		for (var i = 0; i < validEntries.Count; i++)
+		{
+			var item = validEntries[i];
+			validByKey[(item.Entry.TeamId, item.Entry.Round)] = item.Entry;
+		}
+
+		var effectiveByTeam = new Dictionary<int, SortedDictionary<int, (decimal Points, bool IsFromPayload)>>();
+
+		foreach (var existing in existingInDivision)
+		{
+			var key = (existing.TeamId, existing.Round);
+			if (staleZeroSet.Contains(key) || validByKey.ContainsKey(key))
+			{
+				continue;
+			}
+
+			if (!effectiveByTeam.TryGetValue(existing.TeamId, out var rounds))
+			{
+				rounds = new SortedDictionary<int, (decimal Points, bool IsFromPayload)>();
+				effectiveByTeam[existing.TeamId] = rounds;
+			}
+
+			rounds[existing.Round] = (existing.Points, false);
+		}
+
+		foreach (var (entry, _) in validEntries)
+		{
+			if (!effectiveByTeam.TryGetValue(entry.TeamId, out var rounds))
+			{
+				rounds = new SortedDictionary<int, (decimal Points, bool IsFromPayload)>();
+				effectiveByTeam[entry.TeamId] = rounds;
+			}
+
+			rounds[entry.Round] = (entry.Points, true);
+		}
+
+		var clampedStored = new List<(int TeamId, int Round, decimal ClampedPoints)>();
+
+		foreach (var (teamId, rounds) in effectiveByTeam)
+		{
+			var runningTotal = 0m;
+			foreach (var (round, (points, isFromPayload)) in rounds.ToList())
+			{
+				var remainingAllowed = Math.Max(0m, maxPointsPerSeason - runningTotal);
+				var clamped = Math.Min(points, remainingAllowed);
+				runningTotal += clamped;
+
+				if (clamped == points)
+				{
+					continue;
+				}
+
+				if (isFromPayload)
+				{
+					validByKey[(teamId, round)].Points = clamped;
+				}
+				else
+				{
+					clampedStored.Add((teamId, round, clamped));
+				}
+			}
+		}
+
+		return clampedStored;
+	}
+
+	private static bool IsSyncOwnedRecord(VolunteerPoints existing, string importedBy)
+	{
+		if (!string.IsNullOrWhiteSpace(existing.ModifiedBy))
+		{
+			if (existing.ModifiedBy.Contains("volunteer-sync", StringComparison.OrdinalIgnoreCase))
+			{
+				return true;
+			}
+
+			if (string.Equals(existing.ModifiedBy, importedBy, StringComparison.OrdinalIgnoreCase))
+			{
+				return true;
+			}
+		}
+
+		if (!string.IsNullOrWhiteSpace(existing.Notes))
+		{
+			if (existing.Notes.StartsWith("Imported by ", StringComparison.OrdinalIgnoreCase) ||
+				existing.Notes.StartsWith("Cleared by authoritative sync", StringComparison.OrdinalIgnoreCase) ||
+				existing.Notes.StartsWith("Capped to season maximum", StringComparison.OrdinalIgnoreCase))
+			{
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	private async Task RefreshStandingsAndSaveAsync(int divisionId)

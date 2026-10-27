@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using Region42.ScoresStandings.Application.Helpers;
 using Region42.ScoresStandings.VolunteerSync.Models;
 
@@ -73,18 +73,47 @@ public class VolunteerPointsImportPreparer
 				continue;
 			}
 
+			var entries = BuildCappedEntries(aggregatedByTeamRound, syncContext.MaxVolunteerPointsPerSeason);
+
 			imports.Add(new VolunteerPointsBulkUpdateDto
 			{
 				DivisionId = division.DivisionId,
-				Entries = aggregatedByTeamRound.Select(kvp => new VolunteerPointsEntryDto
-				{
-					TeamName = kvp.Key.Team,
-					Round = kvp.Key.Round,
-					Points = kvp.Value
-				}).ToList()
+				Entries = entries
 			});
 		}
 
 		return imports;
+	}
+
+	private static List<VolunteerPointsEntryDto> BuildCappedEntries(
+		Dictionary<(string Team, int Round), decimal> aggregatedByTeamRound,
+		decimal maxPointsPerSeason)
+	{
+		var entries = new List<VolunteerPointsEntryDto>(aggregatedByTeamRound.Count);
+
+		foreach (var teamGroup in aggregatedByTeamRound.GroupBy(kvp => kvp.Key.Team, StringComparer.OrdinalIgnoreCase))
+		{
+			var runningTotal = 0m;
+
+			foreach (var kvp in teamGroup.OrderBy(x => x.Key.Round))
+			{
+				var points = kvp.Value;
+				if (maxPointsPerSeason > 0m)
+				{
+					var remainingAllowed = Math.Max(0m, maxPointsPerSeason - runningTotal);
+					points = Math.Min(points, remainingAllowed);
+					runningTotal += points;
+				}
+
+				entries.Add(new VolunteerPointsEntryDto
+				{
+					TeamName = kvp.Key.Team,
+					Round = kvp.Key.Round,
+					Points = points
+				});
+			}
+		}
+
+		return entries;
 	}
 }

@@ -1,4 +1,4 @@
-using Region42.ScoresStandings.Application.Interfaces;
+﻿using Region42.ScoresStandings.Application.Interfaces;
 using Region42.ScoresStandings.Domain.Interfaces;
 
 namespace Region42.ScoresStandings.Application.Services;
@@ -26,6 +26,7 @@ public class StandingsRefreshService : IStandingsRefreshService
 		var teamIds = teams.Select(t => t.Id).ToHashSet();
 		var volunteerPoints = _context.VolunteerPoints.Where(vp => teamIds.Contains(vp.TeamId)).ToList();
 		var minVolunteerPoints = _context.Settings.MinVolunteerPointsForPlayoff;
+		var maxVolunteerPoints = _context.Settings.MaxVolunteerPointsPerSeason;
 
 		var standingsByRound = StandingsCalculator.CalculateAllRounds(
 			division,
@@ -33,7 +34,8 @@ public class StandingsRefreshService : IStandingsRefreshService
 			games,
 			scores,
 			volunteerPoints,
-			minVolunteerPoints);
+			minVolunteerPoints,
+			maxVolunteerPoints);
 
 		_context.SetStandingsForDivision(divisionId, standingsByRound);
 	}

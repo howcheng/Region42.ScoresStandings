@@ -831,6 +831,7 @@ public class CompetitionDataContext : ICompetitionDataContext
 		Id = settings.Id,
 		MinVolunteerPointsForPlayoff = settings.MinVolunteerPointsForPlayoff,
 		DefaultPlayoffSpots = settings.DefaultPlayoffSpots,
+		MaxVolunteerPointsPerSeason = settings.MaxVolunteerPointsPerSeason,
 		CreatedAt = settings.CreatedAt,
 		CreatedBy = settings.CreatedBy,
 		ModifiedAt = settings.ModifiedAt,

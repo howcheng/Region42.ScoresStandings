@@ -1,4 +1,4 @@
-namespace Region42.ScoresStandings.Domain.Entities;
+﻿namespace Region42.ScoresStandings.Domain.Entities;
 
 /// <summary>
 /// League-wide configuration settings.
@@ -15,6 +15,11 @@ public class Settings : BaseEntity
 	/// Default number of playoff spots for new divisions (can be overridden per division).
 	/// </summary>
 	public int DefaultPlayoffSpots { get; set; } = 1;
+
+	/// <summary>
+	/// Maximum volunteer points a team can earn across the season (0 means no cap).
+	/// </summary>
+	public decimal MaxVolunteerPointsPerSeason { get; set; } = 14.0m;
 
 	// Future extensibility - add more league-wide settings here
 	// Examples:

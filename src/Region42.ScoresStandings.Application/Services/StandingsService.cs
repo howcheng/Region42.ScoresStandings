@@ -57,8 +57,15 @@ public class StandingsService : IStandingsService
 		var cached = _context.GetStandingsByRound(divisionId);
 		if (cached.TryGetValue(throughRound.ToString(), out var snapshot))
 		{
-			var teamsById = _context.Teams.ToDictionary(t => t.Id);
-			return StandingsDocumentMapper.ToEntity(snapshot, divisionId, GetDivisionName(division), teamsById);
+			var maxVolunteerPoints = _context.Settings.MaxVolunteerPointsPerSeason;
+			var hasOverCapTeam = maxVolunteerPoints > 0m &&
+				snapshot.Teams.Any(t => t.VolunteerPoints > maxVolunteerPoints);
+
+			if (!hasOverCapTeam)
+			{
+				var teamsById = _context.Teams.ToDictionary(t => t.Id);
+				return StandingsDocumentMapper.ToEntity(snapshot, divisionId, GetDivisionName(division), teamsById);
+			}
 		}
 
 		return CalculateStandings(division, throughRound);
@@ -112,7 +119,8 @@ public class StandingsService : IStandingsService
 			scores,
 			volunteerPoints,
 			_context.Settings.MinVolunteerPointsForPlayoff,
-			throughRound);
+			throughRound,
+			_context.Settings.MaxVolunteerPointsPerSeason);
 	}
 
 	private static string GetDivisionName(Domain.Entities.Division division)
