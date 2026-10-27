@@ -1,9 +1,10 @@
-namespace Region42.ScoresStandings.Application.DTOs;
+﻿namespace Region42.ScoresStandings.Application.DTOs;
 
 public class VolunteerPointsSyncContextDto
 {
 	public int SeasonId { get; set; }
 	public int SeasonYear { get; set; }
+	public decimal MaxVolunteerPointsPerSeason { get; set; }
 	public List<VolunteerPointsSyncDivisionDto> Divisions { get; set; } = new();
 }
 

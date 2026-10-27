@@ -809,5 +809,56 @@ public class StandingsServiceTests
 		team2Standing.PlayoffQualificationNote.Should().Be("Eliminated from playoffs");
 	}
 
+	[Fact]
+	public async Task GetStandingsByRoundAsync_WhenMaxVolunteerPointsPerSeasonSet_CapsVolunteerPointsAndBypassesOverCapCachedSnapshot()
+	{
+		var season = TestDataBuilder.CreateSeason(1, "Fall 2026");
+		var division = TestDataBuilder.CreateDivision(1, season.Id, AgeGroup.U12, Gender.Boys, 10);
+		var team = TestDataBuilder.CreateTeam(1, division.Id, "12UB01 Sharks");
+		var game = TestDataBuilder.CreateGame(1, division.Id, team.Id, 999, null, 1, GameStatus.Completed);
+		var score = TestDataBuilder.CreateScore(1, game.Id, 2, 0);
+		var vp1 = TestDataBuilder.CreateVolunteerPoints(1, team.Id, 1, 4m, "Round 1");
+		var vp2 = TestDataBuilder.CreateVolunteerPoints(2, team.Id, 2, 4.5m, "Round 2");
+
+		var settings = new Settings
+		{
+			Id = 1,
+			MinVolunteerPointsForPlayoff = 3,
+			DefaultPlayoffSpots = 1,
+			MaxVolunteerPointsPerSeason = 6m
+		};
+
+		SetupBasicMocks(division, [team], [game], [score], [vp1, vp2], settings);
+
+		// Simulate a pre-existing cached snapshot in JSON that has uncapped volunteer points (8.5 > 6)
+		_context.SetStandingsForDivision(division.Id, new Dictionary<string, Domain.Documents.StandingsSnapshotDocument>
+		{
+			["2"] = new Domain.Documents.StandingsSnapshotDocument
+			{
+				ThroughRound = 2,
+				CalculatedAt = DateTime.UtcNow,
+				Teams =
+				[
+					new Domain.Documents.TeamStandingDocument
+					{
+						Rank = 1,
+						TeamId = team.Id,
+						GamesPlayed = 1,
+						Wins = 1,
+						GamePoints = 3,
+						VolunteerPoints = 8.5m,
+						TotalPoints = 11.5m
+					}
+				]
+			}
+		});
+
+		var result = await _service.GetStandingsByRoundAsync(division.Id, 2);
+
+		var standing = result.Standings.Should().ContainSingle().Subject;
+		standing.VolunteerPoints.Should().Be(6m);
+		standing.TotalPoints.Should().Be(9m);
+	}
+
 	#endregion
 }

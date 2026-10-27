@@ -38,7 +38,18 @@ Automated volunteer points import from the cgisports referee assignment log into
 
 
 
-Returns the active season, each division’s **`cgiDivisionCode`** (`10UB`, `12UG`, …), team roster metadata, and **`roundByDate`** (game date → round) used to map export dates to standings rounds.
+Returns the active season, `maxVolunteerPointsPerSeason` (from `season.json` `settings.maxVolunteerPointsPerSeason`), each division’s **`cgiDivisionCode`** (`10UB`, `12UG`, …), team roster metadata, and **`roundByDate`** (game date → round) used to map export dates to standings rounds.
+
+
+
+### Season maximum cap
+
+
+
+When `settings.maxVolunteerPointsPerSeason` in `season.json` is greater than `0`, cumulative volunteer points for each team are capped at that value across the season:
+
+- **`VolunteerPointsImportPreparer`** orders each team’s weekly points by round ascending and clamps any round that would push the team’s running total above `maxVolunteerPointsPerSeason` (emitting `0` for subsequent rounds).
+- **`VolunteerPointsService.BulkImportAsync`** and **`StandingsCalculator` / `StandingsService`** also enforce `maxVolunteerPointsPerSeason` so any pre-existing stored totals or cached standings snapshots in `{division-key}.json` that exceed the cap are clamped automatically.
 
 
 

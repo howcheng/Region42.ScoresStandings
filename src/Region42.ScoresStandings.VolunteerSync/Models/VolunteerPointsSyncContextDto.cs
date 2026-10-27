@@ -1,9 +1,10 @@
-namespace Region42.ScoresStandings.VolunteerSync.Models;
+﻿namespace Region42.ScoresStandings.VolunteerSync.Models;
 
 public class VolunteerPointsSyncContextDto
 {
 	public int SeasonId { get; set; }
 	public int SeasonYear { get; set; }
+	public decimal MaxVolunteerPointsPerSeason { get; set; }
 	public List<VolunteerPointsSyncDivisionDto> Divisions { get; set; } = new();
 }
 

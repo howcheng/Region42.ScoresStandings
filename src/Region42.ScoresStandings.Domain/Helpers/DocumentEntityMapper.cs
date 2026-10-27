@@ -1,4 +1,4 @@
-using Region42.ScoresStandings.Domain.Documents;
+﻿using Region42.ScoresStandings.Domain.Documents;
 using Region42.ScoresStandings.Domain.Entities;
 using Region42.ScoresStandings.Domain.Enums;
 
@@ -36,7 +36,8 @@ public static class DocumentEntityMapper
 		{
 			Id = id,
 			MinVolunteerPointsForPlayoff = doc.MinVolunteerPointsForPlayoff,
-			DefaultPlayoffSpots = doc.DefaultPlayoffSpots
+			DefaultPlayoffSpots = doc.DefaultPlayoffSpots,
+			MaxVolunteerPointsPerSeason = doc.MaxVolunteerPointsPerSeason
 		};
 	}
 
@@ -45,7 +46,8 @@ public static class DocumentEntityMapper
 		return new SettingsDocument
 		{
 			MinVolunteerPointsForPlayoff = entity.MinVolunteerPointsForPlayoff,
-			DefaultPlayoffSpots = entity.DefaultPlayoffSpots
+			DefaultPlayoffSpots = entity.DefaultPlayoffSpots,
+			MaxVolunteerPointsPerSeason = entity.MaxVolunteerPointsPerSeason
 		};
 	}
 

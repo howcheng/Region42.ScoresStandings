@@ -1,4 +1,4 @@
-namespace Region42.ScoresStandings.Domain.Documents;
+﻿namespace Region42.ScoresStandings.Domain.Documents;
 
 public class SeasonDocument
 {
@@ -26,6 +26,7 @@ public class SettingsDocument
 {
 	public int MinVolunteerPointsForPlayoff { get; set; }
 	public int DefaultPlayoffSpots { get; set; } = 1;
+	public decimal MaxVolunteerPointsPerSeason { get; set; } = 14.0m;
 }
 
 public class DivisionDocument

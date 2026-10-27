@@ -1,4 +1,4 @@
-using Region42.ScoresStandings.Application.Interfaces;
+﻿using Region42.ScoresStandings.Application.Interfaces;
 using Region42.ScoresStandings.Domain.Entities;
 using Region42.ScoresStandings.Domain.Enums;
 
@@ -16,7 +16,8 @@ public static class StandingsCalculator
 		IReadOnlyList<Score> scores,
 		IReadOnlyList<VolunteerPoints> volunteerPoints,
 		int minVolunteerPointsForPlayoff,
-		int throughRound)
+		int throughRound,
+		decimal maxVolunteerPointsPerSeason = 0m)
 	{
 		var activeTeams = teams
 			.Where(t => t.DivisionId == division.Id && t.IsActive && t.IsRegion42Team)
@@ -50,7 +51,7 @@ public static class StandingsCalculator
 			.ToList();
 
 		var standings = activeTeams
-			.Select(team => CalculateTeamStanding(team, completedGames, relevantScores, relevantVolunteerPoints, division.ScrimmageRounds))
+			.Select(team => CalculateTeamStanding(team, completedGames, relevantScores, relevantVolunteerPoints, division.ScrimmageRounds, maxVolunteerPointsPerSeason))
 			.OrderByDescending(s => s.TotalPoints)
 			.ThenByDescending(s => s.GoalDifferential)
 			.ThenByDescending(s => s.GoalsFor)
@@ -95,12 +96,13 @@ public static class StandingsCalculator
 		IReadOnlyList<Game> games,
 		IReadOnlyList<Score> scores,
 		IReadOnlyList<VolunteerPoints> volunteerPoints,
-		int minVolunteerPointsForPlayoff)
+		int minVolunteerPointsForPlayoff,
+		decimal maxVolunteerPointsPerSeason = 0m)
 	{
 		var standingsByRound = new Dictionary<string, Domain.Documents.StandingsSnapshotDocument>();
 		for (var round = 0; round <= division.TotalRounds; round++)
 		{
-			var result = Calculate(division, teams, games, scores, volunteerPoints, minVolunteerPointsForPlayoff, round);
+			var result = Calculate(division, teams, games, scores, volunteerPoints, minVolunteerPointsForPlayoff, round, maxVolunteerPointsPerSeason);
 			standingsByRound[round.ToString()] = Helpers.StandingsDocumentMapper.ToDocument(result);
 		}
 
@@ -112,7 +114,8 @@ public static class StandingsCalculator
 		List<Game> games,
 		List<Score> scores,
 		List<VolunteerPoints> volunteerPoints,
-		int scrimmageRounds)
+		int scrimmageRounds,
+		decimal maxVolunteerPointsPerSeason)
 	{
 		var standing = new TeamStanding
 		{
@@ -158,7 +161,13 @@ public static class StandingsCalculator
 		}
 
 		standing.GoalDifferential = standing.GoalsFor - standing.GoalsAgainst;
-		standing.VolunteerPoints = volunteerPoints.Where(vp => vp.TeamId == team.Id).Sum(vp => vp.Points);
+		var totalVolunteerPoints = volunteerPoints.Where(vp => vp.TeamId == team.Id).Sum(vp => vp.Points);
+		if (maxVolunteerPointsPerSeason > 0m && totalVolunteerPoints > maxVolunteerPointsPerSeason)
+		{
+			totalVolunteerPoints = maxVolunteerPointsPerSeason;
+		}
+
+		standing.VolunteerPoints = totalVolunteerPoints;
 		standing.TotalPoints = standing.GamePoints + standing.VolunteerPoints;
 
 		return standing;
