@@ -1,4 +1,4 @@
-using FluentAssertions;
+﻿using FluentAssertions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
@@ -582,6 +582,58 @@ public class HomeControllerTests
 						model.Scores![0].Round.Should().Be(2);
 						model.Scores[0].HomeScore.Should().Be(1);
 						model.Scores[0].AwayScore.Should().Be(1);
+					}
+
+					[Fact]
+					public async Task Standings_WithRescheduledGame_PopulatesRescheduledDateTimeAndLocationFromMakeupGame()
+					{
+						// Arrange
+						var season = _builder.BuildSeason();
+						var division = _builder.BuildDivision(season.Id);
+
+						var standingsResult = new StandingsResult
+						{
+							DivisionId = division.Id,
+							DivisionName = $"{division.AgeGroup} {division.Gender}",
+							ThroughRound = 1,
+							CalculatedAt = DateTime.UtcNow,
+							Standings = new List<TeamStanding> { new TeamStanding { TeamId = 1, TeamName = "Team A" } }
+						};
+
+						var originalGame = _builder.BuildGame(division.Id, 1, 2, 1, GameStatus.Rescheduled);
+						originalGame.Id = 748;
+						originalGame.ScheduledDateTime = new DateTime(2026, 8, 29, 16, 30, 0, DateTimeKind.Utc);
+						originalGame.Location = "Field 1 - Deerhill Park";
+						originalGame.RescheduledToGameId = 775;
+
+						var makeupGame = _builder.BuildGame(division.Id, 1, 2, 8, GameStatus.Scheduled);
+						makeupGame.Id = 775;
+						makeupGame.ScheduledDateTime = new DateTime(2026, 10, 20, 1, 30, 0, DateTimeKind.Utc);
+						makeupGame.Location = "Dos Vientos 1 (games) - Dos Vientos Community Park";
+						makeupGame.RescheduledFromGameId = 748;
+
+						_mockSeasonRepo.Setup(r => r.GetAllAsync())
+							.ReturnsAsync(new List<Season> { season });
+						_mockDivisionRepo.Setup(r => r.FindAsync(It.IsAny<Expression<Func<Division, bool>>>()))
+							.ReturnsAsync(new List<Division> { division });
+						_mockGameService.Setup(s => s.GetGamesByDivisionAndRoundAsync(division.Id, 1))
+							.ReturnsAsync(new List<Game> { originalGame });
+						_mockGameService.Setup(s => s.GetGameByIdAsync(775))
+							.ReturnsAsync(makeupGame);
+						_mockStandingsService.Setup(s => s.GetStandingsByRoundAsync(division.Id, 1))
+							.ReturnsAsync(standingsResult);
+
+						// Act
+						var result = await _controller.Standings(division.Id, 1, null);
+
+						// Assert
+						var viewResult = result.Should().BeOfType<ViewResult>().Subject;
+						var model = viewResult.Model.Should().BeOfType<StandingsViewModel>().Subject;
+						var score = model.Scores.Should().ContainSingle().Subject;
+						score.IsRescheduled.Should().BeTrue();
+						score.Location.Should().Be("Field 1 - Deerhill Park");
+						score.RescheduledLocation.Should().Be("Dos Vientos 1 (games) - Dos Vientos Community Park");
+						score.RescheduledDateTime.Should().Be(new DateTime(2026, 10, 19, 18, 30, 0));
 					}
 
 					[Fact]

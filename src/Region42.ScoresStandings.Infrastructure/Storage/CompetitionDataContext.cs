@@ -792,6 +792,8 @@ public class CompetitionDataContext : ICompetitionDataContext
 		Round = game.Round,
 		Location = game.Location,
 		Status = game.Status,
+		RescheduledToGameId = game.RescheduledToGameId,
+		RescheduledFromGameId = game.RescheduledFromGameId,
 		CreatedAt = game.CreatedAt,
 		CreatedBy = game.CreatedBy,
 		ModifiedAt = game.ModifiedAt,

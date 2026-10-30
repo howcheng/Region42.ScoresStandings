@@ -1,4 +1,4 @@
-using Region42.ScoresStandings.Domain.Enums;
+﻿using Region42.ScoresStandings.Domain.Enums;
 
 namespace Region42.ScoresStandings.Domain.Entities;
 
@@ -11,6 +11,8 @@ public class Game : BaseEntity
 	public int Round { get; set; }
 	public string Location { get; set; } = string.Empty;
 	public GameStatus Status { get; set; }
+	public int? RescheduledToGameId { get; set; }
+	public int? RescheduledFromGameId { get; set; }
 
 	public Division Division { get; set; } = null!;
 	public Team HomeTeam { get; set; } = null!;

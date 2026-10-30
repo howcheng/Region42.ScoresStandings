@@ -152,24 +152,24 @@
 								<input type="datetime-local"
 									   id="newDateTime_@index"
 									   name="scores[@index].NewScheduledDateTime"
-									   value="@(game.Status == GameStatus.Rescheduled ? game.ScheduledDateTime.ToString("yyyy-MM-ddTHH:mm") : "")"
+									   value="@(game.Status == GameStatus.Rescheduled ? (game.RescheduledDateTime ?? game.ScheduledDateTime).ToString("yyyy-MM-ddTHH:mm") : "")"
 									   class="form-control form-control-sm" />
 								<label for="newLocation_@index" class="form-label form-label-sm mt-1">New Location</label>
 								<input type="text"
 									   id="newLocation_@index"
 									   name="scores[@index].NewLocation"
-									   value="@game.Location"
+									   value="@(game.RescheduledLocation ?? game.Location)"
 									   class="form-control form-control-sm" />
 								<label for="newRound_@index" class="form-label form-label-sm mt-1">New Round (optional)</label>
 								<input type="number"
 									   id="newRound_@index"
 									   name="scores[@index].NewRound"
-									   value=""
-									   placeholder="@game.Round (current)"
+									   value="@(game.RescheduledRound?.ToString() ?? "")"
+									   placeholder="Auto from date"
 									   min="1"
 									   max="@((rounds?.Count() ?? 0) + 1)"
 									   class="form-control form-control-sm" />
-								<small class="text-muted">Leave blank to keep round @game.Round. Set to @((rounds?.Count() ?? 0) + 1) for a new makeup round.</small>
+								<small class="text-muted">Leave blank to auto-assign round from new date's week. Set to @((rounds?.Count() ?? 0) + 1) for a new makeup round.</small>
 							</div>
 						</div>
 						<div class="score-field score-field-modified">
@@ -212,7 +212,7 @@
 			<ul class="mb-0">
 				<li>Use the team dropdowns to make last-minute schedule changes if needed.</li>
 				<li><strong>Both scores must be entered for a game to be complete.</strong> Leave both fields empty for games that haven't been played yet, or to clear a score that was entered by mistake.</li>
-				<li>Each team can only appear once per round. The system will validate this when you save.</li>
+				<li>Each team can only appear once per round (excluding rescheduled and makeup games). The system will validate this when you save.</li>
 			</ul>
 		</div>
 	}

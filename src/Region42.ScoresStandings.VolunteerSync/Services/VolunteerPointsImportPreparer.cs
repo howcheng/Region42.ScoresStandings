@@ -53,9 +53,10 @@ public class VolunteerPointsImportPreparer
 					continue;
 				}
 
-				var dateKey = row.Date.ToString("yyyy-MM-dd");
-				if (!division.RoundByDate.TryGetValue(dateKey, out var round))
+				var round = GameRoundCalculator.GetRoundForDate(row.Date, division.RoundByDate);
+				if (!round.HasValue)
 				{
+					var dateKey = row.Date.ToString("yyyy-MM-dd");
 					_logger.LogWarning(
 						"No round mapping for date {Date} in division {DivisionCode}; skipping team {Team}",
 						dateKey,
@@ -64,7 +65,7 @@ public class VolunteerPointsImportPreparer
 					continue;
 				}
 
-				var key = (row.Team, round);
+				var key = (row.Team, round.Value);
 				aggregatedByTeamRound[key] = aggregatedByTeamRound.GetValueOrDefault(key) + row.Points;
 			}
 

@@ -26,6 +26,8 @@ public class GameDocument
 	public int AwayTeamId { get; set; }
 	public int? HomeScore { get; set; }
 	public int? AwayScore { get; set; }
+	public int? RescheduledToGameId { get; set; }
+	public int? RescheduledFromGameId { get; set; }
 	public DateTime ModifiedAt { get; set; }
 	public string ModifiedBy { get; set; } = string.Empty;
 }

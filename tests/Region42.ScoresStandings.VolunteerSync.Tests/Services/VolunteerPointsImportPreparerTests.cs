@@ -113,4 +113,47 @@ public class VolunteerPointsImportPreparerTests
 		var divisionImport = imports.Should().ContainSingle().Subject;
 		divisionImport.Entries.Sum(e => e.Points).Should().Be(8m);
 	}
+
+	[Fact]
+	public void BuildDivisionImports_WhenPointsEarnedOnMidWeekAndSundayDates_AllocatesToWeekRound()
+	{
+		var rawRows = new List<VolunteerPointsRawRow>
+		{
+			new() { DivisionCode = "14UG", Team = "14UG01 (Clark)", Date = new DateTime(2026, 10, 20), Points = 1m },
+			new() { DivisionCode = "14UG", Team = "14UG01 (Clark)", Date = new DateTime(2026, 10, 24), Points = 2m },
+			new() { DivisionCode = "14UG", Team = "14UG02 (Curtis)", Date = new DateTime(2026, 10, 25), Points = 2m }
+		};
+
+		var syncContext = new VolunteerPointsSyncContextDto
+		{
+			SeasonId = 3,
+			SeasonYear = 2026,
+			MaxVolunteerPointsPerSeason = 14m,
+			Divisions =
+			[
+				new VolunteerPointsSyncDivisionDto
+				{
+					DivisionId = 24,
+					CgiDivisionCode = "14UG",
+					TotalRounds = 10,
+					RoundByDate = new Dictionary<string, int>(StringComparer.Ordinal)
+					{
+						["2026-10-17"] = 7,
+						["2026-10-20"] = 8,
+						["2026-10-24"] = 8,
+						["2026-10-25"] = 9,
+						["2026-10-31"] = 9
+					}
+				}
+			]
+		};
+
+		var imports = _preparer.BuildDivisionImports(rawRows, syncContext);
+
+		var divisionImport = imports.Should().ContainSingle(d => d.DivisionId == 24).Subject;
+		divisionImport.Entries.Should().ContainSingle(e =>
+			e.TeamName == "14UG01 (Clark)" && e.Round == 8 && e.Points == 3m);
+		divisionImport.Entries.Should().ContainSingle(e =>
+			e.TeamName == "14UG02 (Curtis)" && e.Round == 9 && e.Points == 2m);
+	}
 }
