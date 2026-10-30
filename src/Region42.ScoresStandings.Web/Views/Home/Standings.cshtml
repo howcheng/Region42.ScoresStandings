@@ -150,6 +150,18 @@
 												{
 													<small class="text-danger fw-bold d-block text-center mt-1">CANCELLED</small>
 												}
+												@if (score.IsRescheduled)
+												{
+													<small class="text-warning-emphasis fw-bold d-block text-center mt-1">
+														RESCHEDULED
+														@if (score.RescheduledDateTime.HasValue)
+														{
+															<span class="fw-normal">
+																to @score.RescheduledDateTime.Value.ToString("MMM dd, h:mm tt")@(string.IsNullOrEmpty(score.RescheduledLocation) ? "" : $" | {score.RescheduledLocation}")
+															</span>
+														}
+													</small>
+												}
 												<small class="text-muted d-block mt-1">
 													@score.ScheduledDateTime.ToString("MMM dd, h:mm tt")
 													@if (!string.IsNullOrEmpty(score.Location))

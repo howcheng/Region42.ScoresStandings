@@ -1,4 +1,4 @@
-using FluentAssertions;
+﻿using FluentAssertions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
@@ -386,5 +386,165 @@ public class ScoresControllerTests
 		_mockScoreService.Verify(
 			s => s.EnterOrUpdateScoreAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<int>()),
 			Times.Never);
+	}
+
+	[Fact]
+	public async Task Entry_Post_WithRescheduledGame_KeepsOriginalAndCreatesMakeupGameInWeekRound()
+	{
+		// Arrange
+		var originalGame = _builder.BuildGame(1, 1, 2, 1);
+		originalGame.Id = 10;
+		originalGame.ScheduledDateTime = new DateTime(2026, 8, 29, 15, 0, 0, DateTimeKind.Utc);
+		originalGame.Location = "Field 1 - Deerhill Park";
+
+		var round8Game = _builder.BuildGame(1, 3, 4, 8);
+		round8Game.Id = 80;
+		round8Game.ScheduledDateTime = new DateTime(2026, 10, 24, 15, 0, 0, DateTimeKind.Utc);
+
+		_mockGameService.Setup(s => s.GetGameByIdAsync(10))
+			.ReturnsAsync(originalGame);
+		_mockGameService.Setup(s => s.GetGamesByDivisionAndRoundAsync(1, 1))
+			.ReturnsAsync(new List<Game> { originalGame });
+		_mockGameService.Setup(s => s.GetGamesByDivisionAsync(1))
+			.ReturnsAsync(new List<Game> { originalGame, round8Game });
+
+		Game? createdMakeup = null;
+		_mockGameService.Setup(s => s.CreateGameAsync(It.IsAny<Game>()))
+			.Callback<Game>(g =>
+			{
+				g.Id = 775;
+				createdMakeup = g;
+			})
+			.ReturnsAsync((Game g) => g);
+
+		_mockGameService.Setup(s => s.UpdateGameAsync(It.IsAny<Game>()))
+			.ReturnsAsync((Game g) => g);
+
+		var scores = new List<ScoreUpdateDto>
+		{
+			new ScoreUpdateDto
+			{
+				GameId = 10,
+				HomeTeamId = 1,
+				AwayTeamId = 2,
+				Status = GameStatus.Rescheduled,
+				NewScheduledDateTime = new DateTime(2026, 10, 19, 18, 30, 0),
+				NewLocation = "Dos Vientos 1 (games) - Dos Vientos Community Park"
+			}
+		};
+
+		// Act
+		var result = await _controller.Entry(scores, 1, 1);
+
+		// Assert
+		result.Should().BeOfType<RedirectToActionResult>();
+		_controller.TempData["ErrorMessage"].Should().BeNull();
+		_controller.TempData["SuccessMessage"].Should().NotBeNull();
+
+		// Original game keeps its original round, date/time, and location
+		originalGame.Round.Should().Be(1);
+		originalGame.ScheduledDateTime.Should().Be(new DateTime(2026, 8, 29, 15, 0, 0, DateTimeKind.Utc));
+		originalGame.Location.Should().Be("Field 1 - Deerhill Park");
+		originalGame.Status.Should().Be(GameStatus.Rescheduled);
+		originalGame.RescheduledToGameId.Should().Be(775);
+
+		// Makeup game is created in Round 8 (the week of 2026-10-18 through 2026-10-24)
+		createdMakeup.Should().NotBeNull();
+		createdMakeup!.Round.Should().Be(8);
+		createdMakeup.Location.Should().Be("Dos Vientos 1 (games) - Dos Vientos Community Park");
+		createdMakeup.RescheduledFromGameId.Should().Be(10);
+		createdMakeup.Status.Should().Be(GameStatus.Scheduled);
+	}
+
+	[Fact]
+	public async Task Entry_Post_WithAlreadyRescheduledGame_UpdatesExistingMakeupGameWithoutDuplicating()
+	{
+		// Arrange
+		var originalGame = _builder.BuildGame(1, 1, 2, 1, GameStatus.Rescheduled);
+		originalGame.Id = 10;
+		originalGame.ScheduledDateTime = new DateTime(2026, 8, 29, 15, 0, 0, DateTimeKind.Utc);
+		originalGame.Location = "Field 1 - Deerhill Park";
+		originalGame.RescheduledToGameId = 775;
+
+		var existingMakeup = _builder.BuildGame(1, 1, 2, 8, GameStatus.Scheduled);
+		existingMakeup.Id = 775;
+		existingMakeup.ScheduledDateTime = new DateTime(2026, 10, 20, 1, 30, 0, DateTimeKind.Utc);
+		existingMakeup.Location = "Dos Vientos 1 (games) - Dos Vientos Community Park";
+		existingMakeup.RescheduledFromGameId = 10;
+
+		var round9Game = _builder.BuildGame(1, 3, 4, 9);
+		round9Game.Id = 90;
+		round9Game.ScheduledDateTime = new DateTime(2026, 10, 31, 15, 0, 0, DateTimeKind.Utc);
+
+		_mockGameService.Setup(s => s.GetGameByIdAsync(10))
+			.ReturnsAsync(originalGame);
+		_mockGameService.Setup(s => s.GetGameByIdAsync(775))
+			.ReturnsAsync(existingMakeup);
+		_mockGameService.Setup(s => s.GetGamesByDivisionAndRoundAsync(1, 1))
+			.ReturnsAsync(new List<Game> { originalGame });
+		_mockGameService.Setup(s => s.GetGamesByDivisionAsync(1))
+			.ReturnsAsync(new List<Game> { originalGame, existingMakeup, round9Game });
+		_mockGameService.Setup(s => s.UpdateGameAsync(It.IsAny<Game>()))
+			.ReturnsAsync((Game g) => g);
+
+		var scores = new List<ScoreUpdateDto>
+		{
+			new ScoreUpdateDto
+			{
+				GameId = 10,
+				HomeTeamId = 1,
+				AwayTeamId = 2,
+				Status = GameStatus.Rescheduled,
+				NewScheduledDateTime = new DateTime(2026, 10, 25, 10, 45, 0),
+				NewLocation = "CC5 - Conejo Creek South Park"
+			}
+		};
+
+		// Act
+		var result = await _controller.Entry(scores, 1, 1);
+
+		// Assert
+		result.Should().BeOfType<RedirectToActionResult>();
+		_mockGameService.Verify(s => s.CreateGameAsync(It.IsAny<Game>()), Times.Never);
+		existingMakeup.Round.Should().Be(9);
+		existingMakeup.Location.Should().Be("CC5 - Conejo Creek South Park");
+	}
+
+	[Fact]
+	public async Task Entry_Post_WithMakeupGameAndRegularGameForSameTeamInSameRound_AllowsSave()
+	{
+		// Arrange - Team 1 plays both a regular round 8 game and a makeup game in round 8
+		var regularGame = _builder.BuildGame(1, 1, 2, 8);
+		regularGame.Id = 80;
+
+		var makeupGame = _builder.BuildGame(1, 1, 3, 8);
+		makeupGame.Id = 775;
+		makeupGame.RescheduledFromGameId = 10;
+
+		_mockGameService.Setup(s => s.GetGameByIdAsync(80))
+			.ReturnsAsync(regularGame);
+		_mockGameService.Setup(s => s.GetGameByIdAsync(775))
+			.ReturnsAsync(makeupGame);
+		_mockGameService.Setup(s => s.GetGamesByDivisionAndRoundAsync(1, 8))
+			.ReturnsAsync(new List<Game> { regularGame, makeupGame });
+		_mockScoreService.Setup(s => s.EnterOrUpdateScoreAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<int>()))
+			.ReturnsAsync(new Score());
+
+		var scores = new List<ScoreUpdateDto>
+		{
+			new ScoreUpdateDto { GameId = 80, HomeTeamId = 1, AwayTeamId = 2, HomeScore = 3, AwayScore = 1, Status = GameStatus.Completed },
+			new ScoreUpdateDto { GameId = 775, HomeTeamId = 1, AwayTeamId = 3, HomeScore = 2, AwayScore = 0, Status = GameStatus.Completed }
+		};
+
+		// Act
+		var result = await _controller.Entry(scores, 1, 8);
+
+		// Assert
+		result.Should().BeOfType<RedirectToActionResult>();
+		_controller.TempData["ErrorMessage"].Should().BeNull();
+		_controller.TempData["SuccessMessage"].Should().NotBeNull();
+		_mockScoreService.Verify(
+			s => s.EnterOrUpdateScoreAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<int>()),
+			Times.Exactly(2));
 	}
 }

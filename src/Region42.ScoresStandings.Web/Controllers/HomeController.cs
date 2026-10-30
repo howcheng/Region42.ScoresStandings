@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
@@ -220,12 +220,21 @@ public class HomeController : Controller
 	{
 		try
 		{
-			var games = await _gameService.GetGamesByDivisionAndRoundAsync(divisionId, displayRound);
-
-			return games
+			var games = (await _gameService.GetGamesByDivisionAndRoundAsync(divisionId, displayRound))
 				.OrderBy(g => g.Round)
 				.ThenBy(g => g.ScheduledDateTime)
-				.Select(g => new GameScoreDisplay
+				.ToList();
+
+			var displays = new List<GameScoreDisplay>(games.Count);
+			foreach (var g in games)
+			{
+				Game? makeupGame = null;
+				if (g.Status == GameStatus.Rescheduled && g.RescheduledToGameId.HasValue)
+				{
+					makeupGame = await _gameService.GetGameByIdAsync(g.RescheduledToGameId.Value);
+				}
+
+				displays.Add(new GameScoreDisplay
 				{
 					GameId = g.Id,
 					HomeTeamName = g.HomeTeam?.Name ?? "Unknown",
@@ -235,9 +244,14 @@ public class HomeController : Controller
 					ScheduledDateTime = TimezoneHelper.ToPacificTime(g.ScheduledDateTime),
 					Location = g.Location,
 					Round = g.Round,
-					IsCancelled = g.Status == GameStatus.Cancelled
-				})
-				.ToList();
+					IsCancelled = g.Status == GameStatus.Cancelled,
+					IsRescheduled = g.Status == GameStatus.Rescheduled,
+					RescheduledDateTime = makeupGame != null ? TimezoneHelper.ToPacificTime(makeupGame.ScheduledDateTime) : null,
+					RescheduledLocation = makeupGame?.Location
+				});
+			}
+
+			return displays;
 		}
 		catch (Exception ex)
 		{

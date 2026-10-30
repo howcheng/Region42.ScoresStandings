@@ -121,6 +121,8 @@ public static class DocumentEntityMapper
 			Status = Enum.Parse<GameStatus>(doc.Status, ignoreCase: true),
 			HomeTeamId = doc.HomeTeamId,
 			AwayTeamId = doc.AwayTeamId,
+			RescheduledToGameId = doc.RescheduledToGameId,
+			RescheduledFromGameId = doc.RescheduledFromGameId,
 			ModifiedAt = doc.ModifiedAt,
 			ModifiedBy = doc.ModifiedBy
 		};
@@ -163,6 +165,8 @@ public static class DocumentEntityMapper
 			AwayTeamId = entity.AwayTeamId,
 			HomeScore = entity.Score?.HomeScore,
 			AwayScore = entity.Score?.AwayScore,
+			RescheduledToGameId = entity.RescheduledToGameId,
+			RescheduledFromGameId = entity.RescheduledFromGameId,
 			ModifiedAt = entity.ModifiedAt,
 			ModifiedBy = entity.ModifiedBy
 		};

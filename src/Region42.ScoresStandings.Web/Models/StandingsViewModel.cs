@@ -1,4 +1,4 @@
-using Region42.ScoresStandings.Application.Interfaces;
+﻿using Region42.ScoresStandings.Application.Interfaces;
 
 namespace Region42.ScoresStandings.Web.Models;
 
@@ -57,4 +57,7 @@ public class GameScoreDisplay
 	public string Location { get; set; } = string.Empty;
 	public int Round { get; set; }
 	public bool IsCancelled { get; set; }
+	public bool IsRescheduled { get; set; }
+	public DateTime? RescheduledDateTime { get; set; }
+	public string? RescheduledLocation { get; set; }
 }

@@ -1,4 +1,4 @@
-using FluentAssertions;
+﻿using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Region42.ScoresStandings.Application.Services;
@@ -383,7 +383,50 @@ public class GameServiceTests
 
 		// Assert
 		await act.Should().ThrowAsync<ArgumentException>()
-			.WithMessage("*Round must be between 1 and 10*");
+			.WithMessage("*Round must be between 1 and 11*");
+	}
+
+	[Fact]
+	public async Task CreateGameAsync_AllowsPastDateForMakeupGame()
+	{
+		// Arrange
+		var division = TestDataBuilder.CreateDivision(1, 1, AgeGroup.U10, Gender.Boys, 10);
+		var homeTeam = TestDataBuilder.CreateTeam(1, division.Id, "Team A");
+		var awayTeam = TestDataBuilder.CreateTeam(2, division.Id, "Team B");
+		var pastDate = DateTime.UtcNow.AddDays(-5);
+		var game = TestDataBuilder.CreateGame(0, division.Id, homeTeam.Id, awayTeam.Id, pastDate, 8);
+		game.RescheduledFromGameId = 42;
+
+		_mockDivisionRepository
+			.Setup(r => r.GetByIdAsync(division.Id))
+			.ReturnsAsync(division);
+
+		_mockTeamRepository
+			.Setup(r => r.GetByIdAsync(homeTeam.Id))
+			.ReturnsAsync(homeTeam);
+
+		_mockTeamRepository
+			.Setup(r => r.GetByIdAsync(awayTeam.Id))
+			.ReturnsAsync(awayTeam);
+
+		_mockGameRepository
+			.Setup(r => r.FindAsync(It.IsAny<System.Linq.Expressions.Expression<Func<Game, bool>>>()))
+			.ReturnsAsync(new List<Game>());
+
+		_mockGameRepository
+			.Setup(r => r.AddAsync(It.IsAny<Game>()))
+			.Returns(Task.CompletedTask);
+
+		_mockGameRepository
+			.Setup(r => r.SaveChangesAsync())
+			.ReturnsAsync(1);
+
+		// Act
+		var result = await _service.CreateGameAsync(game);
+
+		// Assert
+		result.Should().NotBeNull();
+		result.RescheduledFromGameId.Should().Be(42);
 	}
 
 	[Fact]
@@ -715,6 +758,26 @@ public class GameServiceTests
 			.Setup(r => r.FindAsync(It.IsAny<System.Linq.Expressions.Expression<Func<Game, bool>>>()))
 			.ReturnsAsync((System.Linq.Expressions.Expression<Func<Game, bool>> predicate) =>
 				new List<Game> { cancelledGame }.Where(predicate.Compile()).ToList());
+
+		// Act
+		var result = await _service.ValidateNoScheduleConflictAsync(teamId, scheduledTime);
+
+		// Assert
+		result.Should().BeTrue();
+	}
+
+	[Fact]
+	public async Task ValidateNoScheduleConflictAsync_IgnoresRescheduledGames()
+	{
+		// Arrange
+		var teamId = 1;
+		var scheduledTime = DateTime.UtcNow.AddDays(7);
+		var rescheduledGame = TestDataBuilder.CreateGame(1, 1, teamId, 2, scheduledTime, 1, GameStatus.Rescheduled);
+
+		_mockGameRepository
+			.Setup(r => r.FindAsync(It.IsAny<System.Linq.Expressions.Expression<Func<Game, bool>>>()))
+			.ReturnsAsync((System.Linq.Expressions.Expression<Func<Game, bool>> predicate) =>
+				new List<Game> { rescheduledGame }.Where(predicate.Compile()).ToList());
 
 		// Act
 		var result = await _service.ValidateNoScheduleConflictAsync(teamId, scheduledTime);

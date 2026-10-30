@@ -1,4 +1,4 @@
-using Region42.ScoresStandings.Domain.Enums;
+﻿using Region42.ScoresStandings.Domain.Enums;
 
 namespace Region42.ScoresStandings.Application.DTOs;
 
@@ -20,6 +20,9 @@ public class ScoreEntryDto
 	public int? AwayScore { get; set; }
 	public DateTime? LastModified { get; set; }
 	public string? LastModifiedBy { get; set; }
+	public DateTime? RescheduledDateTime { get; set; }
+	public string? RescheduledLocation { get; set; }
+	public int? RescheduledRound { get; set; }
 }
 
 /// <summary>

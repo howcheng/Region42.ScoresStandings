@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Region42.ScoresStandings.Application.DTOs;
@@ -107,6 +107,11 @@ public class ScoresController : Controller
 		foreach (var game in games.OrderBy(g => g.ScheduledDateTime))
 		{
 			var score = await _scoreService.GetScoreByGameIdAsync(game.Id);
+			Game? makeupGame = null;
+			if (game.RescheduledToGameId.HasValue)
+			{
+				makeupGame = await _gameService.GetGameByIdAsync(game.RescheduledToGameId.Value);
+			}
 
 			scoreEntries.Add(new ScoreEntryDto
 			{
@@ -122,14 +127,17 @@ public class ScoresController : Controller
 				HomeScore = score?.HomeScore,
 				AwayScore = score?.AwayScore,
 				LastModified = score?.ModifiedAt,
-				LastModifiedBy = score?.ModifiedBy
-					});
-				}
+				LastModifiedBy = score?.ModifiedBy,
+				RescheduledDateTime = makeupGame != null ? TimezoneHelper.ToPacificTime(makeupGame.ScheduledDateTime) : null,
+				RescheduledLocation = makeupGame?.Location,
+				RescheduledRound = makeupGame?.Round
+			});
+		}
 
-				ViewBag.SelectedRound = round;
+		ViewBag.SelectedRound = round;
 
-				return View(scoreEntries);
-			}
+		return View(scoreEntries);
+	}
 
 	// POST: Scores/Entry
 	[HttpPost]
@@ -142,10 +150,9 @@ public class ScoresController : Controller
 			return RedirectToAction(nameof(Entry), new { divisionId, round });
 		}
 
-		// Validate home/away teams differ, and compute the effective round for each game
-		// (the round it will end up in after this save, accounting for reschedules that
-		// move a game into a different round).
-		var effectiveRounds = new Dictionary<int, int>(); // gameId -> effective round
+		// Validate home/away teams differ, and validate team uniqueness per round
+		// (excluding rescheduled games and makeup games).
+		var batchGamesById = new Dictionary<int, Game>();
 		foreach (var score in scores)
 		{
 			if (score.HomeTeamId == score.AwayTeamId)
@@ -154,50 +161,51 @@ public class ScoresController : Controller
 				return RedirectToAction(nameof(Entry), new { divisionId, round });
 			}
 
-			var effectiveRound = round;
-			if (score.Status == GameStatus.Rescheduled && score.NewRound.HasValue)
+			var existingGame = await _gameService.GetGameByIdAsync(score.GameId);
+			if (existingGame != null)
 			{
-				effectiveRound = score.NewRound.Value;
+				batchGamesById[score.GameId] = existingGame;
 			}
-			effectiveRounds[score.GameId] = effectiveRound;
 		}
 
-		// Validate team uniqueness per effective round. Games in this batch may end up
-		// in rounds other than the page's current round, so for each distinct round
-		// touched we must also consider games already in the database for that round
-		// (excluding games from this batch, which are represented by their new state).
-		var distinctRounds = effectiveRounds.Values.Distinct().ToList();
 		var batchGameIds = scores.Select(s => s.GameId).ToHashSet();
+		var roundTeamAppearances = new Dictionary<int, int>();
 
-		foreach (var targetRound in distinctRounds)
+		foreach (var score in scores)
 		{
-			// Team appearances from the batch that land in this round
-			var roundTeamAppearances = new Dictionary<int, int>();
-			foreach (var score in scores.Where(s => effectiveRounds[s.GameId] == targetRound))
+			if (score.Status == GameStatus.Rescheduled)
 			{
-				roundTeamAppearances[score.HomeTeamId] = roundTeamAppearances.GetValueOrDefault(score.HomeTeamId) + 1;
-				roundTeamAppearances[score.AwayTeamId] = roundTeamAppearances.GetValueOrDefault(score.AwayTeamId) + 1;
+				continue;
 			}
 
-			// Existing games already in this round in the database (excluding games in this batch,
-			// since their post-save state is already reflected above)
-			var existingGamesInRound = await _gameService.GetGamesByDivisionAndRoundAsync(divisionId, targetRound);
-			foreach (var existingGame in existingGamesInRound.Where(g => !batchGameIds.Contains(g.Id)))
+			if (batchGamesById.TryGetValue(score.GameId, out var batchGame) && batchGame.RescheduledFromGameId.HasValue)
 			{
-				roundTeamAppearances[existingGame.HomeTeamId] = roundTeamAppearances.GetValueOrDefault(existingGame.HomeTeamId) + 1;
-				roundTeamAppearances[existingGame.AwayTeamId] = roundTeamAppearances.GetValueOrDefault(existingGame.AwayTeamId) + 1;
+				continue;
 			}
 
-			var duplicateTeams = roundTeamAppearances.Where(kvp => kvp.Value > 1).Select(kvp => kvp.Key).ToList();
-			if (duplicateTeams.Any())
-			{
-				var teams = await _teamService.GetTeamsByDivisionAsync(divisionId);
-				var teamNames = teams.Where(t => duplicateTeams.Contains(t.Id))
-					.Select(t => t.Name)
-					.ToList();
-				TempData["ErrorMessage"] = $"The following team(s) would appear more than once in round {targetRound}: {string.Join(", ", teamNames)}. Each team can only have one game per round.";
-				return RedirectToAction(nameof(Entry), new { divisionId, round });
-			}
+			roundTeamAppearances[score.HomeTeamId] = roundTeamAppearances.GetValueOrDefault(score.HomeTeamId) + 1;
+			roundTeamAppearances[score.AwayTeamId] = roundTeamAppearances.GetValueOrDefault(score.AwayTeamId) + 1;
+		}
+
+		var existingGamesInRound = await _gameService.GetGamesByDivisionAndRoundAsync(divisionId, round);
+		foreach (var existingGame in existingGamesInRound.Where(g =>
+			!batchGameIds.Contains(g.Id) &&
+			g.Status != GameStatus.Rescheduled &&
+			!g.RescheduledFromGameId.HasValue))
+		{
+			roundTeamAppearances[existingGame.HomeTeamId] = roundTeamAppearances.GetValueOrDefault(existingGame.HomeTeamId) + 1;
+			roundTeamAppearances[existingGame.AwayTeamId] = roundTeamAppearances.GetValueOrDefault(existingGame.AwayTeamId) + 1;
+		}
+
+		var duplicateTeams = roundTeamAppearances.Where(kvp => kvp.Value > 1).Select(kvp => kvp.Key).ToList();
+		if (duplicateTeams.Any())
+		{
+			var teams = await _teamService.GetTeamsByDivisionAsync(divisionId);
+			var teamNames = teams.Where(t => duplicateTeams.Contains(t.Id))
+				.Select(t => t.Name)
+				.ToList();
+			TempData["ErrorMessage"] = $"The following team(s) would appear more than once in round {round}: {string.Join(", ", teamNames)}. Each team can only have one game per round.";
+			return RedirectToAction(nameof(Entry), new { divisionId, round });
 		}
 
 		var successCount = 0;
@@ -254,20 +262,72 @@ public class ScoresController : Controller
 
 				if (scoreUpdate.Status == GameStatus.Rescheduled)
 				{
-					game.ScheduledDateTime = TimezoneHelper.ToUtc(scoreUpdate.NewScheduledDateTime!.Value);
-					if (!string.IsNullOrWhiteSpace(scoreUpdate.NewLocation))
+					var newUtcDateTime = TimezoneHelper.ToUtc(scoreUpdate.NewScheduledDateTime!.Value);
+					var newLocation = !string.IsNullOrWhiteSpace(scoreUpdate.NewLocation)
+						? scoreUpdate.NewLocation
+						: game.Location;
+
+					int targetRound;
+					if (scoreUpdate.NewRound.HasValue)
 					{
-						game.Location = scoreUpdate.NewLocation;
+						targetRound = scoreUpdate.NewRound.Value;
 					}
-					if (scoreUpdate.NewRound.HasValue && scoreUpdate.NewRound.Value != game.Round)
+					else
 					{
-						_logger.LogInformation("Moving game {GameId} from round {OldRound} to round {NewRound}",
-							scoreUpdate.GameId, game.Round, scoreUpdate.NewRound.Value);
-						game.Round = scoreUpdate.NewRound.Value;
+						var divisionGames = (await _gameService.GetGamesByDivisionAsync(divisionId))?.ToList() ?? new List<Game>();
+						var roundByDate = divisionGames
+							.Where(g => !g.RescheduledFromGameId.HasValue)
+							.GroupBy(g => g.ScheduledDateTime.Date.ToString("yyyy-MM-dd"))
+							.ToDictionary(grp => grp.Key, grp => grp.First().Round, StringComparer.Ordinal);
+						targetRound = GameRoundCalculator.GetRoundForDate(newUtcDateTime, roundByDate) ?? game.Round;
 					}
+
+					Game? makeupGame = null;
+					if (game.RescheduledToGameId.HasValue)
+					{
+						makeupGame = await _gameService.GetGameByIdAsync(game.RescheduledToGameId.Value);
+					}
+
+					if (makeupGame != null)
+					{
+						makeupGame.HomeTeamId = game.HomeTeamId;
+						makeupGame.AwayTeamId = game.AwayTeamId;
+						makeupGame.ScheduledDateTime = newUtcDateTime;
+						makeupGame.Location = newLocation;
+						makeupGame.Round = targetRound;
+						makeupGame.RescheduledFromGameId = game.Id;
+						await _gameService.UpdateGameAsync(makeupGame);
+					}
+					else
+					{
+						var createdMakeup = await _gameService.CreateGameAsync(new Game
+						{
+							DivisionId = game.DivisionId,
+							HomeTeamId = game.HomeTeamId,
+							AwayTeamId = game.AwayTeamId,
+							ScheduledDateTime = newUtcDateTime,
+							Location = newLocation,
+							Round = targetRound,
+							Status = GameStatus.Scheduled,
+							RescheduledFromGameId = game.Id
+						});
+						game.RescheduledToGameId = createdMakeup.Id;
+					}
+
 					gameChanged = true;
-					_logger.LogInformation("Rescheduled game {GameId} to {ScheduledDateTime} at {Location}",
-						scoreUpdate.GameId, game.ScheduledDateTime, game.Location);
+					_logger.LogInformation("Rescheduled game {GameId} to round {TargetRound} on {ScheduledDateTime} at {Location}",
+						scoreUpdate.GameId, targetRound, newUtcDateTime, newLocation);
+				}
+				else if (game.RescheduledToGameId.HasValue)
+				{
+					var oldMakeupId = game.RescheduledToGameId.Value;
+					var oldMakeup = await _gameService.GetGameByIdAsync(oldMakeupId);
+					if (oldMakeup != null && oldMakeup.Score == null)
+					{
+						await _gameService.DeleteGameAsync(oldMakeupId);
+					}
+					game.RescheduledToGameId = null;
+					gameChanged = true;
 				}
 
 				if (gameChanged)
