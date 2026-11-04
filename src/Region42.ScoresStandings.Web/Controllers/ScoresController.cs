@@ -264,8 +264,11 @@ public class ScoresController : Controller
 					continue;
 				}
 
-				var wasUnscheduled = game.Status == GameStatus.Unscheduled || game.ScheduledDateTime == default;
-				if (wasUnscheduled && scoreUpdate.Status == GameStatus.Scheduled && !scoreUpdate.NewScheduledDateTime.HasValue)
+				var wasUnscheduled = game.Status == GameStatus.Unscheduled;
+				if (wasUnscheduled &&
+					scoreUpdate.Status == GameStatus.Scheduled &&
+					!scoreUpdate.NewScheduledDateTime.HasValue &&
+					!(hasHomeScore && hasAwayScore))
 				{
 					errorCount++;
 					errors.Add($"Game {scoreUpdate.GameId}: A date/time is required when marking an unscheduled game as Scheduled.");

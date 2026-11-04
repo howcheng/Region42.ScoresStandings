@@ -146,10 +146,14 @@
 			const wasUnscheduled = select.dataset.wasUnscheduled === 'true';
 			const newDateTime = rescheduleFields.querySelector('input[type="datetime-local"]');
 			const hasDateTime = newDateTime && newDateTime.value.trim() !== '';
+			const homeScoreInput = document.getElementById(`homeScore_${select.dataset.index}`);
+			const awayScoreInput = document.getElementById(`awayScore_${select.dataset.index}`);
+			const hasScores = homeScoreInput && awayScoreInput &&
+				homeScoreInput.value.trim() !== '' && awayScoreInput.value.trim() !== '';
 
 			if (selectedStatus === 'Rescheduled' && !hasDateTime) {
 				missingRescheduleDates.push(i + 1);
-			} else if (selectedStatus === 'Scheduled' && wasUnscheduled && !hasDateTime) {
+			} else if (selectedStatus === 'Scheduled' && wasUnscheduled && !hasDateTime && !hasScores) {
 				missingScheduleDates.push(i + 1);
 			}
 		});
