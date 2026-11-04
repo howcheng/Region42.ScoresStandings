@@ -1,4 +1,6 @@
 @model Region42.ScoresStandings.Web.Models.StandingsViewModel
+@using Region42.ScoresStandings.Application.DTOs
+@using Region42.ScoresStandings.Domain.Enums
 @{
 	ViewData["Title"] = "Standings";
 }
@@ -91,97 +93,356 @@
 	</div>
 </div>
 
-@if (Model.DivisionId > 0 && Model.Standings.Any())
-{
-	<div class="row">
-		<!-- Scores Column -->
-		<div class="col-lg-5 mb-4">
-			<div class="card">
-				<div class="card-header bg-primary text-white">
-					<h5 class="mb-0">
-						@if (Model.ThroughRound > 0)
-						{
-							<span>Round @Model.ThroughRound Scores</span>
-						}
-						else
-						{
-							<span>All Scores</span>
-						}
-					</h5>
-				</div>
-				<div class="card-body">
-					@if (Model.Scores.Any())
+@{
+	void RenderTournamentMatchItem(TournamentMatchDisplayDto match)
+	{
+		var homeIsWinner = match.WinnerTeamId.HasValue && match.HomeTeamId > 0 && match.WinnerTeamId == match.HomeTeamId;
+		var awayIsWinner = match.WinnerTeamId.HasValue && match.AwayTeamId > 0 && match.WinnerTeamId == match.AwayTeamId;
+
+		<div class="list-group-item tournament-match-item">
+			<div class="d-flex justify-content-between align-items-center mb-1">
+				<span class="badge bg-primary-subtle text-primary-emphasis">@match.StageLabel</span>
+				<small class="text-muted">
+					@if (match.Status != GameStatus.Unscheduled && match.ScheduledDateTime != default)
 					{
-						@* Group by round *@
-						var scoresByRound = Model.Scores.GroupBy(s => s.Round).OrderBy(g => g.Key);
-
-						foreach (var roundGroup in scoresByRound)
+						@match.ScheduledDateTime.ToString("MMM dd, h:mm tt")
+						@if (!string.IsNullOrWhiteSpace(match.Location) && match.Location != "TBD")
 						{
-							if (scoresByRound.Count() > 1)
-							{
-								<h6 class="text-muted mt-3 mb-2">Round @roundGroup.Key</h6>
-							}
-
-							<div class="list-group mb-3">
-								@foreach (var score in roundGroup.OrderBy(s => s.ScheduledDateTime))
-								{
-									<div class="list-group-item">
-										<div class="d-flex justify-content-between align-items-center">
-											<div class="flex-grow-1">
-												<div class="row">
-													<div class="col-5 text-end">
-														<strong>@score.HomeTeamName</strong>
-													</div>
-													<div class="col-2 text-center">
-														@if (score.HomeScore.HasValue && score.AwayScore.HasValue)
-														{
-															<span class="badge bg-success">@score.HomeScore - @score.AwayScore</span>
-														}
-														else
-														{
-															<span class="badge bg-secondary">vs</span>
-														}
-													</div>
-													<div class="col-5">
-														<strong>@score.AwayTeamName</strong>
-													</div>
-												</div>
-												@if (score.IsCancelled)
-												{
-													<small class="text-danger fw-bold d-block text-center mt-1">CANCELLED</small>
-												}
-												@if (score.IsRescheduled)
-												{
-													<small class="text-warning-emphasis fw-bold d-block text-center mt-1">
-														RESCHEDULED
-														@if (score.RescheduledDateTime.HasValue)
-														{
-															<span class="fw-normal">
-																to @score.RescheduledDateTime.Value.ToString("MMM dd, h:mm tt")@(string.IsNullOrEmpty(score.RescheduledLocation) ? "" : $" | {score.RescheduledLocation}")
-															</span>
-														}
-													</small>
-												}
-												<small class="text-muted d-block mt-1">
-													@score.ScheduledDateTime.ToString("MMM dd, h:mm tt")
-													@if (!string.IsNullOrEmpty(score.Location))
-													{
-														<span> | @score.Location</span>
-													}
-												</small>
-											</div>
-										</div>
-									</div>
-								}
-							</div>
+							<span> | @match.Location</span>
+						}
+					}
+					else if (!string.IsNullOrWhiteSpace(match.Location) && match.Location != "TBD")
+					{
+						<span>@match.Location</span>
+					}
+					else
+					{
+						<span class="fst-italic">Unscheduled</span>
+					}
+				</small>
+			</div>
+			<div class="row align-items-center">
+				<div class="col-5 text-end @(homeIsWinner ? "fw-bold text-success" : "")">
+					@if (match.HomeSeed.HasValue)
+					{
+						<span class="badge bg-secondary me-1">#@match.HomeSeed</span>
+					}
+					<span class="d-none d-sm-inline">@match.HomeTeamName</span>
+					<span class="d-sm-none">@match.HomeTeamShortName</span>
+				</div>
+				<div class="col-2 text-center px-0">
+					@if (match.HomeScore.HasValue && match.AwayScore.HasValue)
+					{
+						<span class="badge bg-success">@match.HomeScore - @match.AwayScore</span>
+						@if (match.IsDecidedByPenalties && match.HomePenaltyScore.HasValue && match.AwayPenaltyScore.HasValue)
+						{
+							<small class="d-block text-muted fw-semibold mt-1">(@match.HomePenaltyScore - @match.AwayPenaltyScore PK)</small>
+						}
+						else if (match.IsForfeit)
+						{
+							<small class="d-block text-warning-emphasis fw-semibold mt-1">(Forfeit)</small>
 						}
 					}
 					else
 					{
-						<p class="text-muted">No games scheduled for this selection.</p>
+						<span class="badge bg-secondary">vs</span>
 					}
 				</div>
+				<div class="col-5 @(awayIsWinner ? "fw-bold text-success" : "")">
+					@if (match.AwaySeed.HasValue)
+					{
+						<span class="badge bg-secondary me-1">#@match.AwaySeed</span>
+					}
+					<span class="d-none d-sm-inline">@match.AwayTeamName</span>
+					<span class="d-sm-none">@match.AwayTeamShortName</span>
+				</div>
 			</div>
+			@if (match.HomeYellowCards > 0 || match.AwayYellowCards > 0 || match.HomeRedCards > 0 || match.AwayRedCards > 0)
+			{
+				<div class="d-flex justify-content-between small mt-1 text-muted">
+					<div>
+						@if (match.HomeYellowCards > 0)
+						{
+							<span class="badge bg-warning text-dark me-1">YC: @match.HomeYellowCards</span>
+						}
+						@if (match.HomeRedCards > 0)
+						{
+							<span class="badge bg-danger">RC: @match.HomeRedCards</span>
+						}
+					</div>
+					<div>
+						@if (match.AwayYellowCards > 0)
+						{
+							<span class="badge bg-warning text-dark me-1">YC: @match.AwayYellowCards</span>
+						}
+						@if (match.AwayRedCards > 0)
+						{
+							<span class="badge bg-danger">RC: @match.AwayRedCards</span>
+						}
+					</div>
+				</div>
+			}
+		</div>
+	}
+}
+
+@if (Model.DivisionId > 0 && Model.Standings.Any())
+{
+	<div class="row">
+		<!-- Left Column: Tournament Bracket / Pool Play (in Round 10) OR Regular Scores -->
+		<div class="col-lg-5 mb-4">
+			@if (Model.Tournament != null && Model.ThroughRound == Model.TotalRounds)
+			{
+				<div class="card">
+					<div class="card-header bg-primary text-white">
+						<h5 class="mb-0">
+							@if (Model.Tournament.Format == TournamentFormatType.Bracket)
+							{
+								<i class="bi bi-diagram-3-fill me-1"></i>
+								<span>End-of-Season Tournament Bracket</span>
+							}
+							else
+							{
+								<i class="bi bi-trophy-fill me-1"></i>
+								<span>End-of-Season Tournament (Pool Play &amp; Final)</span>
+							}
+						</h5>
+					</div>
+					<div class="card-body">
+						@if (Model.Tournament.IsCompleted && !string.IsNullOrEmpty(Model.Tournament.ChampionTeamName))
+						{
+							<div class="alert alert-success d-flex align-items-center mb-3" role="alert">
+								<i class="bi bi-trophy-fill fs-4 me-2 text-warning"></i>
+								<div>
+									<strong>Tournament Champion:</strong> @Model.Tournament.ChampionTeamName
+								</div>
+							</div>
+						}
+
+						@if (!Model.Tournament.IsReady)
+						{
+							<div class="alert alert-info mb-0" role="alert">
+								<i class="bi bi-info-circle-fill me-1"></i>
+								Tournament matchups will be populated automatically from Round @(Model.TotalRounds - 1) standings once Round @(Model.TotalRounds - 1) is completed.
+							</div>
+						}
+						else if (Model.Tournament.Format == TournamentFormatType.Bracket)
+						{
+							@if (Model.Tournament.ByeTeams.Any())
+							{
+								<div class="mb-3">
+									<h6 class="text-muted text-uppercase small fw-bold mb-2">First-Round Byes</h6>
+									<div class="d-flex flex-wrap gap-2">
+										@foreach (var byeTeam in Model.Tournament.ByeTeams)
+										{
+											<span class="badge bg-light text-dark border p-2">
+												<span class="badge bg-secondary me-1">#@byeTeam.Seed</span>
+												@byeTeam.TeamName
+											</span>
+										}
+									</div>
+								</div>
+							}
+
+							@if (Model.Tournament.Quarterfinals.Any())
+							{
+								<h6 class="text-muted text-uppercase small fw-bold mt-3 mb-2">Quarterfinals</h6>
+								<div class="list-group mb-3">
+									@foreach (var match in Model.Tournament.Quarterfinals)
+									{
+										RenderTournamentMatchItem(match);
+									}
+								</div>
+							}
+
+							@if (Model.Tournament.Semifinals.Any())
+							{
+								<h6 class="text-muted text-uppercase small fw-bold mt-3 mb-2">Semifinals</h6>
+								<div class="list-group mb-3">
+									@foreach (var match in Model.Tournament.Semifinals)
+									{
+										RenderTournamentMatchItem(match);
+									}
+								</div>
+							}
+
+							@if (Model.Tournament.FinalMatch != null)
+							{
+								<h6 class="text-muted text-uppercase small fw-bold mt-3 mb-2">Championship Final</h6>
+								<div class="list-group mb-2">
+									@{ RenderTournamentMatchItem(Model.Tournament.FinalMatch); }
+								</div>
+							}
+						}
+						else if (Model.Tournament.Format == TournamentFormatType.PoolPlayWithFinal)
+						{
+							<h6 class="text-muted text-uppercase small fw-bold mb-2">Pool Play Standings (10-Point System)</h6>
+							<div class="table-responsive mb-2">
+								<table class="table table-sm table-striped table-hover mb-1" id="poolStandingsTable">
+									<thead>
+										<tr>
+											<th class="text-center">#</th>
+											<th>Team</th>
+											<th class="text-center" title="Games Played">GP</th>
+											<th class="text-center" title="Wins">W</th>
+											<th class="text-center" title="Draws">D</th>
+											<th class="text-center" title="Losses">L</th>
+											<th class="text-center" title="Goals For">GF</th>
+											<th class="text-center" title="Goals Against">GA</th>
+											<th class="text-center" title="Yellow Cards">YC</th>
+											<th class="text-center" title="Red Cards">RC</th>
+											<th class="text-center" title="Pool Points (AYSO 10-Point System)"><strong>Pts</strong></th>
+										</tr>
+									</thead>
+									<tbody>
+										@foreach (var row in Model.Tournament.PoolStandings)
+										{
+											<tr class="@(row.AdvancesToFinal ? "table-info" : "")">
+												<td class="text-center">@row.Rank</td>
+												<td>
+													<span class="badge bg-secondary me-1">#@row.Seed</span>
+													<strong class="d-none d-sm-inline">@row.TeamName</strong>
+													<strong class="d-sm-none">@row.TeamShortName</strong>
+												</td>
+												<td class="text-center">@row.GamesPlayed</td>
+												<td class="text-center">@row.Wins</td>
+												<td class="text-center">@row.Draws</td>
+												<td class="text-center">@row.Losses</td>
+												<td class="text-center">@row.GoalsFor</td>
+												<td class="text-center">@row.GoalsAgainst</td>
+												<td class="text-center">@row.YellowCards</td>
+												<td class="text-center">@row.RedCards</td>
+												<td class="text-center"><strong>@row.PoolPoints</strong></td>
+											</tr>
+										}
+									</tbody>
+								</table>
+							</div>
+							<small class="text-muted d-block mb-3">
+								<strong>10-Point System:</strong> Win = 6, Tie = 3, Loss = 0, +1/goal (max 3), +1 earned shutout, Forfeit = 7 (1&ndash;0, no shutout), YC = &minus;1, RC = &minus;2. Top 2 advance to Final. Referee points are not included.
+							</small>
+
+							@if (Model.Tournament.PoolPlayMatches.Any())
+							{
+								<h6 class="text-muted text-uppercase small fw-bold mt-3 mb-2">Pool Play Games</h6>
+								<div class="list-group mb-3">
+									@foreach (var match in Model.Tournament.PoolPlayMatches)
+									{
+										RenderTournamentMatchItem(match);
+									}
+								</div>
+							}
+
+							@if (Model.Tournament.FinalMatch != null)
+							{
+								<h6 class="text-muted text-uppercase small fw-bold mt-3 mb-2">Championship Final</h6>
+								<div class="list-group mb-2">
+									@{ RenderTournamentMatchItem(Model.Tournament.FinalMatch); }
+								</div>
+							}
+						}
+					</div>
+				</div>
+			}
+			else
+			{
+				<div class="card">
+					<div class="card-header bg-primary text-white">
+						<h5 class="mb-0">
+							@if (Model.ThroughRound > 0)
+							{
+								<span>Round @Model.ThroughRound Scores</span>
+							}
+							else
+							{
+								<span>All Scores</span>
+							}
+						</h5>
+					</div>
+					<div class="card-body">
+						@if (Model.Scores.Any())
+						{
+							var scoresByRound = Model.Scores.GroupBy(s => s.Round).OrderBy(g => g.Key);
+
+							foreach (var roundGroup in scoresByRound)
+							{
+								if (scoresByRound.Count() > 1)
+								{
+									<h6 class="text-muted mt-3 mb-2">Round @roundGroup.Key</h6>
+								}
+
+								<div class="list-group mb-3">
+									@foreach (var score in roundGroup.OrderBy(s => s.ScheduledDateTime))
+									{
+										<div class="list-group-item">
+											<div class="d-flex justify-content-between align-items-center">
+												<div class="flex-grow-1">
+													<div class="row">
+														<div class="col-5 text-end">
+															<strong>@score.HomeTeamName</strong>
+														</div>
+														<div class="col-2 text-center">
+															@if (score.HomeScore.HasValue && score.AwayScore.HasValue)
+															{
+																<span class="badge bg-success">@score.HomeScore - @score.AwayScore</span>
+															}
+															else
+															{
+																<span class="badge bg-secondary">vs</span>
+															}
+														</div>
+														<div class="col-5">
+															<strong>@score.AwayTeamName</strong>
+														</div>
+													</div>
+													@if (score.IsCancelled)
+													{
+														<small class="text-danger fw-bold d-block text-center mt-1">CANCELLED</small>
+													}
+													@if (score.IsRescheduled)
+													{
+														<small class="text-warning-emphasis fw-bold d-block text-center mt-1">
+															RESCHEDULED
+															@if (score.RescheduledDateTime.HasValue)
+															{
+																<span class="fw-normal">
+																	to @score.RescheduledDateTime.Value.ToString("MMM dd, h:mm tt")@(string.IsNullOrEmpty(score.RescheduledLocation) ? "" : $" | {score.RescheduledLocation}")
+																</span>
+															}
+														</small>
+													}
+													<small class="text-muted d-block mt-1">
+														@if (score.ScheduledDateTime != default)
+														{
+															@score.ScheduledDateTime.ToString("MMM dd, h:mm tt")
+															@if (!string.IsNullOrEmpty(score.Location))
+															{
+																<span> | @score.Location</span>
+															}
+														}
+														else if (!string.IsNullOrEmpty(score.Location))
+														{
+															<span>@score.Location</span>
+														}
+														else
+														{
+															<span class="fst-italic">Unscheduled</span>
+														}
+													</small>
+												</div>
+											</div>
+										</div>
+									}
+								</div>
+							}
+						}
+						else
+						{
+							<p class="text-muted">No games scheduled for this selection.</p>
+						}
+					</div>
+				</div>
+			}
 		</div>
 
 		<!-- Standings Column -->
@@ -189,10 +450,17 @@
 			<div class="card">
 				<div class="card-header bg-success text-white">
 					<h5 class="mb-0">
-						@Model.DivisionName Standings
-						@if (Model.ThroughRound > 0)
+						@if (Model.IsFinalStandings)
 						{
-							<span class="small">(Through Round @Model.ThroughRound)</span>
+							<span>@Model.DivisionName Final Standings</span>
+						}
+						else
+						{
+							<span>@Model.DivisionName Standings</span>
+							@if (Model.ThroughRound > 0)
+							{
+								<span class="small">(Through Round @Model.ThroughRound)</span>
+							}
 						}
 					</h5>
 				</div>
@@ -235,9 +503,15 @@
 										<td>
 											<strong class="d-none d-sm-inline">@team.TeamName</strong>
 											<strong class="d-sm-none">@team.TeamShortName</strong>
+											@if (Model.TournamentWinnerTeamId == team.TeamId)
+											{
+												<span class="badge bg-warning text-dark ms-1" title="Tournament Champion">
+													<i class="bi bi-trophy-fill"></i>
+												</span>
+											}
 											@if (team.QualifiesForPlayoffs)
 											{
-												<span class="badge bg-success ms-1" title="Qualifies for Playoffs">
+												<span class="badge bg-success ms-1" title="@(team.PlayoffQualificationNote ?? "Qualifies for Playoffs")">
 													<i class="bi bi-star-fill"></i>
 												</span>
 											}
@@ -253,7 +527,6 @@
 										<td class="text-center d-none d-md-table-cell points-detail">@team.VolunteerPoints</td>
 										<td class="text-center">
 												<strong>@team.TotalPoints</strong>
-												@* Mobile points detail icon *@
 												<button type="button" class="btn btn-sm btn-link d-md-none p-0 ms-1 points-detail-btn"
 														data-team-name="@team.TeamName"
 														data-game-points="@team.GamePoints"
@@ -272,6 +545,10 @@
 					{
 						<div class="alert alert-success mt-3 mb-0" role="alert">
 							<i class="bi bi-star-fill"></i> Teams highlighted qualify for playoffs
+							@if (Model.TournamentWinnerTeamId.HasValue)
+							{
+								<span class="ms-2">(<i class="bi bi-trophy-fill text-warning"></i> = Tournament Champion)</span>
+							}
 						</div>
 					}
 

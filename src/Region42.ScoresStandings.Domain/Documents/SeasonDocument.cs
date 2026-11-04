@@ -39,6 +39,8 @@ public class DivisionDocument
 	public int PlayoffSpots { get; set; } = 1;
 	public int ScrimmageRounds { get; set; }
 	public string? CustomMessage { get; set; }
+	public string? EndOfSeasonTournamentFormat { get; set; }
+	public int? PoolPlayTiebreakerWinnerTeamId { get; set; }
 	public List<TeamDocument> Teams { get; set; } = new();
 }
 

@@ -1,4 +1,4 @@
-using Region42.ScoresStandings.Domain.Documents;
+﻿using Region42.ScoresStandings.Domain.Documents;
 using Region42.ScoresStandings.Domain.Entities;
 using Region42.ScoresStandings.Domain.Interfaces;
 
@@ -45,6 +45,11 @@ public class TestCompetitionDataContext : ICompetitionDataContext
 
 	public void Add<T>(T entity) where T : BaseEntity
 	{
+		if (entity.Id == 0)
+		{
+			entity.Id = AllocateNextId();
+		}
+
 		switch (entity)
 		{
 			case Season season: Seasons.Add(season); break;

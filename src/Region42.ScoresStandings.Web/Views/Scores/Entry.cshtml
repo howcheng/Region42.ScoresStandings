@@ -1,4 +1,5 @@
 @model IEnumerable<Region42.ScoresStandings.Application.DTOs.ScoreEntryDto>
+@using Region42.ScoresStandings.Application.DTOs
 @using Region42.ScoresStandings.Domain.Enums
 
 @{
@@ -8,6 +9,10 @@
 	var teams = ViewBag.Teams as List<SelectListItem>;
 	var selectedDivisionId = ViewBag.SelectedDivisionId as int?;
 	var selectedRound = ViewBag.SelectedRound as int?;
+	var isTournamentRound = ViewBag.IsTournamentRound as bool? ?? false;
+	var tournamentFormat = ViewBag.TournamentFormat as TournamentFormatType? ?? TournamentFormatType.None;
+	var tournamentDisplay = ViewBag.TournamentDisplay as TournamentDisplayDto;
+	var hasEnteredTournamentScores = ViewBag.HasEnteredTournamentScores as bool? ?? false;
 }
 
 @section Styles {
@@ -55,11 +60,61 @@
 
 @if (selectedDivisionId.HasValue && selectedRound.HasValue)
 {
+	if (isTournamentRound)
+	{
+		<div class="card border-primary mb-3">
+			<div class="card-body d-flex flex-wrap justify-content-between align-items-center gap-2 py-2">
+				<div>
+					<i class="bi bi-trophy-fill text-primary me-1"></i>
+					<strong>End-of-Season Tournament (@(tournamentFormat == TournamentFormatType.Bracket ? "Single-Elimination Bracket" : "Pool Play + Final"))</strong>
+					<span class="text-muted small d-block">
+						Seeded from Round @(selectedRound.Value - 1) standings. Tournament scores do not affect regular-season game points.
+					</span>
+				</div>
+				<form asp-action="RegenerateTournament" method="post" id="regenerateTournamentForm" data-has-scores="@(hasEnteredTournamentScores ? "true" : "false")">
+					<input type="hidden" name="divisionId" value="@selectedDivisionId" />
+					<input type="hidden" name="round" value="@selectedRound" />
+					<input type="hidden" name="forceReset" value="@(hasEnteredTournamentScores ? "true" : "false")" />
+					<button type="submit" class="btn btn-sm @(Model.Any() ? "btn-outline-warning" : "btn-primary")">
+						<i class="bi bi-arrow-repeat"></i>
+						@(Model.Any() ? "Re-seed / Regenerate Tournament" : "Generate Tournament Games")
+					</button>
+				</form>
+			</div>
+		</div>
+	}
+
 	if (Model.Any())
 	{
 		<form asp-action="Entry" method="post">
 			<input type="hidden" name="divisionId" value="@selectedDivisionId" />
 			<input type="hidden" name="round" value="@selectedRound" />
+
+			@if (tournamentDisplay is { Format: TournamentFormatType.PoolPlayWithFinal, RequiresPenaltyShootoutTiebreaker: true })
+			{
+				<div class="alert alert-warning border-warning mb-3" role="alert">
+					<div class="row align-items-center g-2">
+						<div class="col-md-7">
+							<i class="bi bi-exclamation-triangle-fill me-1"></i>
+							<strong>Pool Play Tiebreaker Required (FIFA Kicks from the Penalty Mark):</strong>
+							<div class="small">
+								Teams remain tied after Head-to-Head, Wins, Cards, Capped Goals Allowed, and Capped Goal Differential. Select the penalty shootout winner to advance to the Final:
+							</div>
+						</div>
+						<div class="col-md-5">
+							<select name="poolPlayTiebreakerWinnerTeamId" class="form-select form-select-sm">
+								<option value="0">-- Select FIFA Kicks Winner --</option>
+								@foreach (var tiedTeam in tournamentDisplay.TiedTeamsForTiebreaker)
+								{
+									<option value="@tiedTeam.TeamId" selected="@(tournamentDisplay.PoolPlayTiebreakerWinnerTeamId == tiedTeam.TeamId)">
+										#@tiedTeam.Seed @tiedTeam.TeamName
+									</option>
+								}
+							</select>
+						</div>
+					</div>
+				</div>
+			}
 
 			<div id="scoresList">
 				<div class="score-row score-row-header d-none d-md-flex">
@@ -77,82 +132,252 @@
 				}
 				@foreach (var game in Model)
 				{
-					<div class="score-row">
+					var tournamentGame = game as TournamentScoreEntryDto;
+					var elimGame = game as EliminationScoreEntryDto;
+					var poolGame = game as PoolPlayScoreEntryDto;
+					var isTbdMatch = tournamentGame != null && (game.HomeTeamId == 0 || game.AwayTeamId == 0);
+					var showPkFields = elimGame != null && !elimGame.IsForfeit &&
+						(elimGame.IsDecidedByPenalties || (elimGame.HomeScore.HasValue && elimGame.AwayScore.HasValue && elimGame.HomeScore == elimGame.AwayScore));
+
+					<div class="score-row" data-game-index="@index" data-is-elimination="@(elimGame != null ? "true" : "false")">
 						<div class="score-field score-field-datetime">
 							<label class="score-field-label d-md-none">Date/Time</label>
 							<div class="score-field-value">
-								@game.ScheduledDateTime.ToString("ddd, MMM d")
-								<br />
-								<small class="text-muted">@game.ScheduledDateTime.ToString("h:mm tt")</small>
+								@if (tournamentGame != null)
+								{
+									<span class="badge bg-primary d-inline-block mb-1">@tournamentGame.StageLabel</span>
+									<br />
+								}
+								@if (game.Status == GameStatus.Unscheduled || game.ScheduledDateTime == default)
+								{
+									<span class="text-muted fst-italic">Unscheduled</span>
+								}
+								else
+								{
+									@game.ScheduledDateTime.ToString("ddd, MMM d")
+									<br />
+									<small class="text-muted">@game.ScheduledDateTime.ToString("h:mm tt")</small>
+								}
 							</div>
 						</div>
 						<div class="score-field score-field-location">
 							<label class="score-field-label d-md-none">Location</label>
-							<div class="score-field-value">@game.Location</div>
+							<div class="score-field-value">
+								@if (string.IsNullOrWhiteSpace(game.Location))
+								{
+									<span class="text-muted fst-italic">TBD</span>
+								}
+								else
+								{
+									@game.Location
+								}
+							</div>
 						</div>
 						<div class="score-field score-field-team">
 							<label for="homeTeam_@index" class="score-field-label d-md-none">Home Team</label>
 							<input type="hidden" name="scores[@index].GameId" value="@game.GameId" />
-							<select id="homeTeam_@index" name="scores[@index].HomeTeamId" class="form-select form-select-sm" required>
-								@if (teams != null)
-								{
-									foreach (var team in teams)
+							@if (game.HomeTeamId == 0 && tournamentGame != null)
+							{
+								<input type="hidden" name="scores[@index].HomeTeamId" value="0" />
+								<span class="badge bg-secondary">@game.HomeTeamName</span>
+							}
+							else
+							{
+								<select id="homeTeam_@index" name="scores[@index].HomeTeamId" class="form-select form-select-sm" required>
+									@if (teams != null)
 									{
-										<option value="@team.Value" selected="@(team.Value == game.HomeTeamId.ToString())">
-											@team.Text
-										</option>
+										foreach (var team in teams)
+										{
+											<option value="@team.Value" selected="@(team.Value == game.HomeTeamId.ToString())">
+												@team.Text
+											</option>
+										}
 									}
-								}
-							</select>
+								</select>
+							}
 						</div>
-						<div class="score-field score-field-score">
+						<div class="score-field score-field-score flex-column align-items-start">
 							<label for="homeScore_@index" class="score-field-label d-md-none">Home Score</label>
 							<input type="number"
 								   id="homeScore_@index"
 								   name="scores[@index].HomeScore"
 								   value="@game.HomeScore"
 								   class="form-control form-control-sm score-input"
+								   data-index="@index"
 								   min="0"
-								   max="99" />
+								   max="99"
+								   disabled="@isTbdMatch" />
+							@if (elimGame != null)
+							{
+								<div id="homePkContainer_@index" class="pk-score-container mt-1 @(showPkFields ? "" : "d-none")">
+									<label for="homePenaltyScore_@index" class="form-label-sm text-muted d-block">Home PK</label>
+									<input type="number"
+										   id="homePenaltyScore_@index"
+										   name="scores[@index].HomePenaltyScore"
+										   value="@elimGame.HomePenaltyScore"
+										   class="form-control form-control-sm score-input pk-input"
+										   min="0"
+										   max="99"
+										   disabled="@isTbdMatch" />
+								</div>
+							}
+							@if (poolGame != null)
+							{
+								<div class="card-inputs mt-1 d-flex gap-1">
+									<div>
+										<label for="homeYellowCards_@index" class="form-label-sm text-warning-emphasis d-block" title="Home Yellow Cards">YC</label>
+										<input type="number"
+											   id="homeYellowCards_@index"
+											   name="scores[@index].HomeYellowCards"
+											   value="@poolGame.HomeYellowCards"
+											   class="form-control form-control-sm card-input"
+											   min="0"
+											   max="20"
+											   disabled="@isTbdMatch" />
+									</div>
+									<div>
+										<label for="homeRedCards_@index" class="form-label-sm text-danger d-block" title="Home Red Cards">RC</label>
+										<input type="number"
+											   id="homeRedCards_@index"
+											   name="scores[@index].HomeRedCards"
+											   value="@poolGame.HomeRedCards"
+											   class="form-control form-control-sm card-input"
+											   min="0"
+											   max="20"
+											   disabled="@isTbdMatch" />
+									</div>
+								</div>
+							}
 						</div>
-						<div class="score-field score-field-score">
+						<div class="score-field score-field-score flex-column align-items-start">
 							<label for="awayScore_@index" class="score-field-label d-md-none">Away Score</label>
 							<input type="number"
 								   id="awayScore_@index"
 								   name="scores[@index].AwayScore"
 								   value="@game.AwayScore"
 								   class="form-control form-control-sm score-input"
+								   data-index="@index"
 								   min="0"
-								   max="99" />
+								   max="99"
+								   disabled="@isTbdMatch" />
+							@if (elimGame != null)
+							{
+								<div id="awayPkContainer_@index" class="pk-score-container mt-1 @(showPkFields ? "" : "d-none")">
+									<label for="awayPenaltyScore_@index" class="form-label-sm text-muted d-block">Away PK</label>
+									<input type="number"
+										   id="awayPenaltyScore_@index"
+										   name="scores[@index].AwayPenaltyScore"
+										   value="@elimGame.AwayPenaltyScore"
+										   class="form-control form-control-sm score-input pk-input"
+										   min="0"
+										   max="99"
+										   disabled="@isTbdMatch" />
+								</div>
+							}
+							@if (poolGame != null)
+							{
+								<div class="card-inputs mt-1 d-flex gap-1">
+									<div>
+										<label for="awayYellowCards_@index" class="form-label-sm text-warning-emphasis d-block" title="Away Yellow Cards">YC</label>
+										<input type="number"
+											   id="awayYellowCards_@index"
+											   name="scores[@index].AwayYellowCards"
+											   value="@poolGame.AwayYellowCards"
+											   class="form-control form-control-sm card-input"
+											   min="0"
+											   max="20"
+											   disabled="@isTbdMatch" />
+									</div>
+									<div>
+										<label for="awayRedCards_@index" class="form-label-sm text-danger d-block" title="Away Red Cards">RC</label>
+										<input type="number"
+											   id="awayRedCards_@index"
+											   name="scores[@index].AwayRedCards"
+											   value="@poolGame.AwayRedCards"
+											   class="form-control form-control-sm card-input"
+											   min="0"
+											   max="20"
+											   disabled="@isTbdMatch" />
+									</div>
+								</div>
+							}
 						</div>
 						<div class="score-field score-field-team">
 							<label for="awayTeam_@index" class="score-field-label d-md-none">Away Team</label>
-							<select id="awayTeam_@index" name="scores[@index].AwayTeamId" class="form-select form-select-sm" required>
-								@if (teams != null)
-								{
-									foreach (var team in teams)
+							@if (game.AwayTeamId == 0 && tournamentGame != null)
+							{
+								<input type="hidden" name="scores[@index].AwayTeamId" value="0" />
+								<span class="badge bg-secondary">@game.AwayTeamName</span>
+							}
+							else
+							{
+								<select id="awayTeam_@index" name="scores[@index].AwayTeamId" class="form-select form-select-sm" required>
+									@if (teams != null)
 									{
-										<option value="@team.Value" selected="@(team.Value == game.AwayTeamId.ToString())">
-											@team.Text
-										</option>
+										foreach (var team in teams)
+										{
+											<option value="@team.Value" selected="@(team.Value == game.AwayTeamId.ToString())">
+												@team.Text
+											</option>
+										}
 									}
-								}
-							</select>
+								</select>
+							}
 						</div>
 						<div class="score-field score-field-status">
 							<label for="status_@index" class="score-field-label d-md-none">Status</label>
-							<select id="status_@index" name="scores[@index].Status" class="form-select form-select-sm game-status-select" data-index="@index">
+							<select id="status_@index"
+									name="scores[@index].Status"
+									class="form-select form-select-sm game-status-select"
+									data-index="@index"
+									data-was-unscheduled="@(game.Status == GameStatus.Unscheduled || game.ScheduledDateTime == default ? "true" : "false")">
 								@foreach (GameStatus status in Enum.GetValues<GameStatus>())
 								{
 									<option value="@((int)status)" selected="@(status == game.Status)">@status</option>
 								}
 							</select>
-							<div id="rescheduleFields_@index" class="reschedule-fields mt-2 @(game.Status == GameStatus.Rescheduled ? "" : "d-none")">
+							@if (tournamentGame != null)
+							{
+								<div class="tournament-toggles mt-1 d-flex flex-wrap gap-2">
+									<div class="form-check form-check-inline mb-0">
+										<input type="checkbox"
+											   class="form-check-input forfeit-toggle"
+											   id="isForfeit_@index"
+											   name="scores[@index].IsForfeit"
+											   value="true"
+											   data-index="@index"
+											   checked="@tournamentGame.IsForfeit"
+											   disabled="@isTbdMatch" />
+										<label class="form-check-label small" for="isForfeit_@index" title="Forfeit (scored as 1-0, 7 pts in pool play with no earned shutout bonus)">Forfeit</label>
+									</div>
+									@if (elimGame != null)
+									{
+										<div class="form-check form-check-inline mb-0">
+											<input type="checkbox"
+												   class="form-check-input pk-toggle"
+												   id="isDecidedByPenalties_@index"
+												   name="scores[@index].IsDecidedByPenalties"
+												   value="true"
+												   data-index="@index"
+												   checked="@showPkFields"
+												   disabled="@isTbdMatch" />
+											<label class="form-check-label small" for="isDecidedByPenalties_@index" title="Game decided by penalty shootout after tied regulation">PK Shootout</label>
+										</div>
+									}
+								</div>
+							}
+							@{
+								var showScheduleFields = game.Status is GameStatus.Rescheduled or GameStatus.Unscheduled;
+								var effectiveDateTime = game.Status == GameStatus.Rescheduled
+									? (game.RescheduledDateTime ?? (game.ScheduledDateTime != default ? game.ScheduledDateTime : (DateTime?)null))
+									: (game.ScheduledDateTime != default ? game.ScheduledDateTime : (DateTime?)null);
+							}
+							<div id="rescheduleFields_@index" class="reschedule-fields mt-2 @(showScheduleFields ? "" : "d-none")">
 								<label for="newDateTime_@index" class="form-label form-label-sm">New Date/Time</label>
 								<input type="datetime-local"
 									   id="newDateTime_@index"
 									   name="scores[@index].NewScheduledDateTime"
-									   value="@(game.Status == GameStatus.Rescheduled ? (game.RescheduledDateTime ?? game.ScheduledDateTime).ToString("yyyy-MM-ddTHH:mm") : "")"
+									   value="@(effectiveDateTime?.ToString("yyyy-MM-ddTHH:mm") ?? "")"
 									   class="form-control form-control-sm" />
 								<label for="newLocation_@index" class="form-label form-label-sm mt-1">New Location</label>
 								<input type="text"
@@ -160,16 +385,18 @@
 									   name="scores[@index].NewLocation"
 									   value="@(game.RescheduledLocation ?? game.Location)"
 									   class="form-control form-control-sm" />
-								<label for="newRound_@index" class="form-label form-label-sm mt-1">New Round (optional)</label>
-								<input type="number"
-									   id="newRound_@index"
-									   name="scores[@index].NewRound"
-									   value="@(game.RescheduledRound?.ToString() ?? "")"
-									   placeholder="Auto from date"
-									   min="1"
-									   max="@((rounds?.Count() ?? 0) + 1)"
-									   class="form-control form-control-sm" />
-								<small class="text-muted">Leave blank to auto-assign round from new date's week. Set to @((rounds?.Count() ?? 0) + 1) for a new makeup round.</small>
+								<div id="newRoundContainer_@index" class="@(game.Status == GameStatus.Rescheduled ? "" : "d-none")">
+									<label for="newRound_@index" class="form-label form-label-sm mt-1">New Round (optional)</label>
+									<input type="number"
+										   id="newRound_@index"
+										   name="scores[@index].NewRound"
+										   value="@(game.RescheduledRound?.ToString() ?? "")"
+										   placeholder="Auto from date"
+										   min="1"
+										   max="@((rounds?.Count() ?? 0) + 1)"
+										   class="form-control form-control-sm" />
+									<small class="text-muted">Leave blank to auto-assign round from new date's week. Set to @((rounds?.Count() ?? 0) + 1) for a new makeup round.</small>
+								</div>
 							</div>
 						</div>
 						<div class="score-field score-field-modified">
@@ -212,14 +439,29 @@
 			<ul class="mb-0">
 				<li>Use the team dropdowns to make last-minute schedule changes if needed.</li>
 				<li><strong>Both scores must be entered for a game to be complete.</strong> Leave both fields empty for games that haven't been played yet, or to clear a score that was entered by mistake.</li>
-				<li>Each team can only appear once per round (excluding rescheduled and makeup games). The system will validate this when you save.</li>
+				@if (isTournamentRound)
+				{
+					<li><strong>Forfeits:</strong> Check <em>Forfeit</em> and enter <code>1 - 0</code> (or <code>0 - 1</code>). In pool play, a forfeit awards 7 points (no earned shutout bonus).</li>
+					<li><strong>Elimination Games:</strong> If regulation ends in a tie, check <em>PK Shootout</em> and enter the penalty shootout scores.</li>
+				}
+				else
+				{
+					<li>Each team can only appear once per round (excluding rescheduled and makeup games). The system will validate this when you save.</li>
+				}
 			</ul>
 		</div>
 	}
 	else
 	{
 		<div class="alert alert-warning" role="alert">
-			No games scheduled for this division and round.
+			@if (isTournamentRound)
+			{
+				<span>No tournament games have been generated yet. Complete all Round @(selectedRound.Value - 1) games to auto-generate the tournament, or click <strong>Generate Tournament Games</strong> above to create them on demand.</span>
+			}
+			else
+			{
+				<span>No games scheduled for this division and round.</span>
+			}
 		</div>
 	}
 }

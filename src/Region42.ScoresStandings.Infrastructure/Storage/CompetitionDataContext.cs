@@ -759,6 +759,8 @@ public class CompetitionDataContext : ICompetitionDataContext
 		PlayoffSpots = division.PlayoffSpots,
 		ScrimmageRounds = division.ScrimmageRounds,
 		CustomMessage = division.CustomMessage,
+		EndOfSeasonTournamentFormat = division.EndOfSeasonTournamentFormat,
+		PoolPlayTiebreakerWinnerTeamId = division.PoolPlayTiebreakerWinnerTeamId,
 		CreatedAt = division.CreatedAt,
 		CreatedBy = division.CreatedBy,
 		ModifiedAt = division.ModifiedAt,
@@ -782,37 +784,88 @@ public class CompetitionDataContext : ICompetitionDataContext
 		RowVersion = team.RowVersion
 	};
 
-	private static Game CloneGame(Game game) => new()
+	private static Game CloneGame(Game game)
 	{
-		Id = game.Id,
-		DivisionId = game.DivisionId,
-		HomeTeamId = game.HomeTeamId,
-		AwayTeamId = game.AwayTeamId,
-		ScheduledDateTime = game.ScheduledDateTime,
-		Round = game.Round,
-		Location = game.Location,
-		Status = game.Status,
-		RescheduledToGameId = game.RescheduledToGameId,
-		RescheduledFromGameId = game.RescheduledFromGameId,
-		CreatedAt = game.CreatedAt,
-		CreatedBy = game.CreatedBy,
-		ModifiedAt = game.ModifiedAt,
-		ModifiedBy = game.ModifiedBy,
-		RowVersion = game.RowVersion
-	};
+		Game cloned = game switch
+		{
+			EliminationGame eg => new EliminationGame
+			{
+				Stage = eg.Stage,
+				HomeTeamPlaceholder = eg.HomeTeamPlaceholder,
+				AwayTeamPlaceholder = eg.AwayTeamPlaceholder
+			},
+			PoolPlayGame ppg => new PoolPlayGame
+			{
+				Stage = ppg.Stage,
+				HomeTeamPlaceholder = ppg.HomeTeamPlaceholder,
+				AwayTeamPlaceholder = ppg.AwayTeamPlaceholder
+			},
+			TournamentGame tg => new TournamentGame
+			{
+				Stage = tg.Stage,
+				HomeTeamPlaceholder = tg.HomeTeamPlaceholder,
+				AwayTeamPlaceholder = tg.AwayTeamPlaceholder
+			},
+			_ => new Game()
+		};
 
-	private static Score CloneScore(Score score) => new()
+		cloned.Id = game.Id;
+		cloned.DivisionId = game.DivisionId;
+		cloned.HomeTeamId = game.HomeTeamId;
+		cloned.AwayTeamId = game.AwayTeamId;
+		cloned.ScheduledDateTime = game.ScheduledDateTime;
+		cloned.Round = game.Round;
+		cloned.Location = game.Location;
+		cloned.Status = game.Status;
+		cloned.RescheduledToGameId = game.RescheduledToGameId;
+		cloned.RescheduledFromGameId = game.RescheduledFromGameId;
+		cloned.CreatedAt = game.CreatedAt;
+		cloned.CreatedBy = game.CreatedBy;
+		cloned.ModifiedAt = game.ModifiedAt;
+		cloned.ModifiedBy = game.ModifiedBy;
+		cloned.RowVersion = game.RowVersion;
+
+		return cloned;
+	}
+
+	private static Score CloneScore(Score score)
 	{
-		Id = score.Id,
-		GameId = score.GameId,
-		HomeScore = score.HomeScore,
-		AwayScore = score.AwayScore,
-		CreatedAt = score.CreatedAt,
-		CreatedBy = score.CreatedBy,
-		ModifiedAt = score.ModifiedAt,
-		ModifiedBy = score.ModifiedBy,
-		RowVersion = score.RowVersion
-	};
+		Score cloned = score switch
+		{
+			EliminationScore es => new EliminationScore
+			{
+				IsForfeit = es.IsForfeit,
+				IsDecidedByPenalties = es.IsDecidedByPenalties,
+				HomePenaltyScore = es.HomePenaltyScore,
+				AwayPenaltyScore = es.AwayPenaltyScore
+			},
+			PoolPlayScore pps => new PoolPlayScore
+			{
+				IsForfeit = pps.IsForfeit,
+				HomeRedCards = pps.HomeRedCards,
+				AwayRedCards = pps.AwayRedCards,
+				HomeYellowCards = pps.HomeYellowCards,
+				AwayYellowCards = pps.AwayYellowCards
+			},
+			TournamentScore ts => new TournamentScore
+			{
+				IsForfeit = ts.IsForfeit
+			},
+			_ => new Score()
+		};
+
+		cloned.Id = score.Id;
+		cloned.GameId = score.GameId;
+		cloned.HomeScore = score.HomeScore;
+		cloned.AwayScore = score.AwayScore;
+		cloned.CreatedAt = score.CreatedAt;
+		cloned.CreatedBy = score.CreatedBy;
+		cloned.ModifiedAt = score.ModifiedAt;
+		cloned.ModifiedBy = score.ModifiedBy;
+		cloned.RowVersion = score.RowVersion;
+
+		return cloned;
+	}
 
 	private static VolunteerPoints CloneVolunteerPoints(VolunteerPoints vp) => new()
 	{

@@ -69,38 +69,46 @@ public class GameService : IGameService
 			throw new ArgumentException($"Division with ID {game.DivisionId} does not exist.", nameof(game.DivisionId));
 		}
 
-		// Validate home team exists and belongs to division
-		var homeTeam = await _teamRepository.GetByIdAsync(game.HomeTeamId);
-		if (homeTeam == null)
+		var isTournamentGame = game is TournamentGame;
+
+		// Validate home team exists and belongs to division (unless TBD on a tournament game)
+		if (!isTournamentGame || game.HomeTeamId != 0)
 		{
-			_logger.LogWarning("Home team {TeamId} not found", game.HomeTeamId);
-			throw new ArgumentException($"Home team with ID {game.HomeTeamId} does not exist.", nameof(game.HomeTeamId));
+			var homeTeam = await _teamRepository.GetByIdAsync(game.HomeTeamId);
+			if (homeTeam == null)
+			{
+				_logger.LogWarning("Home team {TeamId} not found", game.HomeTeamId);
+				throw new ArgumentException($"Home team with ID {game.HomeTeamId} does not exist.", nameof(game.HomeTeamId));
+			}
+
+			if (homeTeam.DivisionId != game.DivisionId)
+			{
+				_logger.LogWarning("Home team {TeamId} does not belong to division {DivisionId}",
+					game.HomeTeamId, game.DivisionId);
+				throw new InvalidOperationException($"Home team '{homeTeam.Name}' does not belong to the specified division.");
+			}
 		}
 
-		if (homeTeam.DivisionId != game.DivisionId)
+		// Validate away team exists and belongs to division (unless TBD on a tournament game)
+		if (!isTournamentGame || game.AwayTeamId != 0)
 		{
-			_logger.LogWarning("Home team {TeamId} does not belong to division {DivisionId}", 
-				game.HomeTeamId, game.DivisionId);
-			throw new InvalidOperationException($"Home team '{homeTeam.Name}' does not belong to the specified division.");
+			var awayTeam = await _teamRepository.GetByIdAsync(game.AwayTeamId);
+			if (awayTeam == null)
+			{
+				_logger.LogWarning("Away team {TeamId} not found", game.AwayTeamId);
+				throw new ArgumentException($"Away team with ID {game.AwayTeamId} does not exist.", nameof(game.AwayTeamId));
+			}
+
+			if (awayTeam.DivisionId != game.DivisionId)
+			{
+				_logger.LogWarning("Away team {TeamId} does not belong to division {DivisionId}",
+					game.AwayTeamId, game.DivisionId);
+				throw new InvalidOperationException($"Away team '{awayTeam.Name}' does not belong to the specified division.");
+			}
 		}
 
-		// Validate away team exists and belongs to division
-		var awayTeam = await _teamRepository.GetByIdAsync(game.AwayTeamId);
-		if (awayTeam == null)
-		{
-			_logger.LogWarning("Away team {TeamId} not found", game.AwayTeamId);
-			throw new ArgumentException($"Away team with ID {game.AwayTeamId} does not exist.", nameof(game.AwayTeamId));
-		}
-
-		if (awayTeam.DivisionId != game.DivisionId)
-		{
-			_logger.LogWarning("Away team {TeamId} does not belong to division {DivisionId}", 
-				game.AwayTeamId, game.DivisionId);
-			throw new InvalidOperationException($"Away team '{awayTeam.Name}' does not belong to the specified division.");
-		}
-
-		// Validate team doesn't play itself
-		if (game.HomeTeamId == game.AwayTeamId)
+		// Validate team doesn't play itself (when both teams are assigned)
+		if ((!isTournamentGame || (game.HomeTeamId != 0 && game.AwayTeamId != 0)) && game.HomeTeamId == game.AwayTeamId)
 		{
 			_logger.LogWarning("Team {TeamId} cannot play against itself", game.HomeTeamId);
 			throw new InvalidOperationException("A team cannot play against itself.");
@@ -111,31 +119,37 @@ public class GameService : IGameService
 		var maxAllowedRound = division.TotalRounds + 1;
 		if (game.Round < 1 || game.Round > maxAllowedRound)
 		{
-			_logger.LogWarning("Invalid round number {Round} for division with {TotalRounds} rounds", 
+			_logger.LogWarning("Invalid round number {Round} for division with {TotalRounds} rounds",
 				game.Round, division.TotalRounds);
 			throw new ArgumentException($"Round must be between 1 and {maxAllowedRound}.", nameof(game.Round));
 		}
 
-		// Validate scheduled date/time (allow past dates when creating a makeup game for a rescheduled fixture)
-		if (!game.RescheduledFromGameId.HasValue && game.ScheduledDateTime < DateTime.UtcNow.AddDays(-1))
+		if (!isTournamentGame && game.Status != GameStatus.Unscheduled && game.ScheduledDateTime != default)
 		{
-			_logger.LogWarning("Game scheduled in the past: {ScheduledDateTime}", game.ScheduledDateTime);
-			throw new ArgumentException("Game cannot be scheduled in the past.", nameof(game.ScheduledDateTime));
-		}
+			// Validate scheduled date/time (allow past dates when creating a makeup game for a rescheduled fixture)
+			if (!game.RescheduledFromGameId.HasValue && game.ScheduledDateTime < DateTime.UtcNow.AddDays(-1))
+			{
+				_logger.LogWarning("Game scheduled in the past: {ScheduledDateTime}", game.ScheduledDateTime);
+				throw new ArgumentException("Game cannot be scheduled in the past.", nameof(game.ScheduledDateTime));
+			}
 
-		// Check for schedule conflicts
-		if (!await ValidateNoScheduleConflictAsync(game.HomeTeamId, game.ScheduledDateTime))
-		{
-			_logger.LogWarning("Home team {TeamId} has scheduling conflict at {ScheduledDateTime}", 
-				game.HomeTeamId, game.ScheduledDateTime);
-			throw new InvalidOperationException($"Home team '{homeTeam.Name}' is already scheduled to play at {game.ScheduledDateTime:g}.");
-		}
+			var homeTeam = await _teamRepository.GetByIdAsync(game.HomeTeamId);
+			var awayTeam = await _teamRepository.GetByIdAsync(game.AwayTeamId);
 
-		if (!await ValidateNoScheduleConflictAsync(game.AwayTeamId, game.ScheduledDateTime))
-		{
-			_logger.LogWarning("Away team {TeamId} has scheduling conflict at {ScheduledDateTime}", 
-				game.AwayTeamId, game.ScheduledDateTime);
-			throw new InvalidOperationException($"Away team '{awayTeam.Name}' is already scheduled to play at {game.ScheduledDateTime:g}.");
+			// Check for schedule conflicts
+			if (!await ValidateNoScheduleConflictAsync(game.HomeTeamId, game.ScheduledDateTime))
+			{
+				_logger.LogWarning("Home team {TeamId} has scheduling conflict at {ScheduledDateTime}",
+					game.HomeTeamId, game.ScheduledDateTime);
+				throw new InvalidOperationException($"Home team '{homeTeam!.Name}' is already scheduled to play at {game.ScheduledDateTime:g}.");
+			}
+
+			if (!await ValidateNoScheduleConflictAsync(game.AwayTeamId, game.ScheduledDateTime))
+			{
+				_logger.LogWarning("Away team {TeamId} has scheduling conflict at {ScheduledDateTime}",
+					game.AwayTeamId, game.ScheduledDateTime);
+				throw new InvalidOperationException($"Away team '{awayTeam!.Name}' is already scheduled to play at {game.ScheduledDateTime:g}.");
+			}
 		}
 
 		// Set default status if not provided
@@ -171,38 +185,46 @@ public class GameService : IGameService
 			throw new ArgumentException($"Division with ID {game.DivisionId} does not exist.", nameof(game.DivisionId));
 		}
 
-		// Validate home team
-		var homeTeam = await _teamRepository.GetByIdAsync(game.HomeTeamId);
-		if (homeTeam == null)
+		var isTournamentGame = game is TournamentGame || existingGame is TournamentGame;
+
+		// Validate home team (unless TBD on a tournament game)
+		if (!isTournamentGame || game.HomeTeamId != 0)
 		{
-			_logger.LogWarning("Home team {TeamId} not found", game.HomeTeamId);
-			throw new ArgumentException($"Home team with ID {game.HomeTeamId} does not exist.", nameof(game.HomeTeamId));
+			var homeTeam = await _teamRepository.GetByIdAsync(game.HomeTeamId);
+			if (homeTeam == null)
+			{
+				_logger.LogWarning("Home team {TeamId} not found", game.HomeTeamId);
+				throw new ArgumentException($"Home team with ID {game.HomeTeamId} does not exist.", nameof(game.HomeTeamId));
+			}
+
+			if (homeTeam.DivisionId != game.DivisionId)
+			{
+				_logger.LogWarning("Home team {TeamId} does not belong to division {DivisionId}",
+					game.HomeTeamId, game.DivisionId);
+				throw new InvalidOperationException($"Home team '{homeTeam.Name}' does not belong to the specified division.");
+			}
 		}
 
-		if (homeTeam.DivisionId != game.DivisionId)
+		// Validate away team (unless TBD on a tournament game)
+		if (!isTournamentGame || game.AwayTeamId != 0)
 		{
-			_logger.LogWarning("Home team {TeamId} does not belong to division {DivisionId}", 
-				game.HomeTeamId, game.DivisionId);
-			throw new InvalidOperationException($"Home team '{homeTeam.Name}' does not belong to the specified division.");
+			var awayTeam = await _teamRepository.GetByIdAsync(game.AwayTeamId);
+			if (awayTeam == null)
+			{
+				_logger.LogWarning("Away team {TeamId} not found", game.AwayTeamId);
+				throw new ArgumentException($"Away team with ID {game.AwayTeamId} does not exist.", nameof(game.AwayTeamId));
+			}
+
+			if (awayTeam.DivisionId != game.DivisionId)
+			{
+				_logger.LogWarning("Away team {TeamId} does not belong to division {DivisionId}",
+					game.AwayTeamId, game.DivisionId);
+				throw new InvalidOperationException($"Away team '{awayTeam.Name}' does not belong to the specified division.");
+			}
 		}
 
-		// Validate away team
-		var awayTeam = await _teamRepository.GetByIdAsync(game.AwayTeamId);
-		if (awayTeam == null)
-		{
-			_logger.LogWarning("Away team {TeamId} not found", game.AwayTeamId);
-			throw new ArgumentException($"Away team with ID {game.AwayTeamId} does not exist.", nameof(game.AwayTeamId));
-		}
-
-		if (awayTeam.DivisionId != game.DivisionId)
-		{
-			_logger.LogWarning("Away team {TeamId} does not belong to division {DivisionId}", 
-				game.AwayTeamId, game.DivisionId);
-			throw new InvalidOperationException($"Away team '{awayTeam.Name}' does not belong to the specified division.");
-		}
-
-		// Validate team doesn't play itself
-		if (game.HomeTeamId == game.AwayTeamId)
+		// Validate team doesn't play itself (when both teams are assigned)
+		if ((!isTournamentGame || (game.HomeTeamId != 0 && game.AwayTeamId != 0)) && game.HomeTeamId == game.AwayTeamId)
 		{
 			_logger.LogWarning("Team {TeamId} cannot play against itself", game.HomeTeamId);
 			throw new InvalidOperationException("A team cannot play against itself.");
@@ -213,24 +235,30 @@ public class GameService : IGameService
 		var maxAllowedRound = division.TotalRounds + 1;
 		if (game.Round < 1 || game.Round > maxAllowedRound)
 		{
-			_logger.LogWarning("Invalid round number {Round} for division with {TotalRounds} rounds", 
+			_logger.LogWarning("Invalid round number {Round} for division with {TotalRounds} rounds",
 				game.Round, division.TotalRounds);
 			throw new ArgumentException($"Round must be between 1 and {maxAllowedRound}.", nameof(game.Round));
 		}
 
-		// Check for schedule conflicts (excluding this game)
-		if (!await ValidateNoScheduleConflictAsync(game.HomeTeamId, game.ScheduledDateTime, game.Id))
+		if (!isTournamentGame && game.Status != GameStatus.Unscheduled && game.ScheduledDateTime != default)
 		{
-			_logger.LogWarning("Home team {TeamId} has scheduling conflict at {ScheduledDateTime}", 
-				game.HomeTeamId, game.ScheduledDateTime);
-			throw new InvalidOperationException($"Home team '{homeTeam.Name}' is already scheduled to play at {game.ScheduledDateTime:g}.");
-		}
+			var homeTeam = await _teamRepository.GetByIdAsync(game.HomeTeamId);
+			var awayTeam = await _teamRepository.GetByIdAsync(game.AwayTeamId);
 
-		if (!await ValidateNoScheduleConflictAsync(game.AwayTeamId, game.ScheduledDateTime, game.Id))
-		{
-			_logger.LogWarning("Away team {TeamId} has scheduling conflict at {ScheduledDateTime}", 
-				game.AwayTeamId, game.ScheduledDateTime);
-			throw new InvalidOperationException($"Away team '{awayTeam.Name}' is already scheduled to play at {game.ScheduledDateTime:g}.");
+			// Check for schedule conflicts (excluding this game)
+			if (!await ValidateNoScheduleConflictAsync(game.HomeTeamId, game.ScheduledDateTime, game.Id))
+			{
+				_logger.LogWarning("Home team {TeamId} has scheduling conflict at {ScheduledDateTime}",
+					game.HomeTeamId, game.ScheduledDateTime);
+				throw new InvalidOperationException($"Home team '{homeTeam!.Name}' is already scheduled to play at {game.ScheduledDateTime:g}.");
+			}
+
+			if (!await ValidateNoScheduleConflictAsync(game.AwayTeamId, game.ScheduledDateTime, game.Id))
+			{
+				_logger.LogWarning("Away team {TeamId} has scheduling conflict at {ScheduledDateTime}",
+					game.AwayTeamId, game.ScheduledDateTime);
+				throw new InvalidOperationException($"Away team '{awayTeam!.Name}' is already scheduled to play at {game.ScheduledDateTime:g}.");
+			}
 		}
 
 		_gameRepository.Update(game);
@@ -298,6 +326,8 @@ public class GameService : IGameService
 			(g.HomeTeamId == teamId || g.AwayTeamId == teamId) &&
 			g.Status != GameStatus.Cancelled &&
 			g.Status != GameStatus.Rescheduled &&
+			g.Status != GameStatus.Unscheduled &&
+			g.ScheduledDateTime != default &&
 			g.ScheduledDateTime >= startWindow &&
 			g.ScheduledDateTime <= endWindow);
 

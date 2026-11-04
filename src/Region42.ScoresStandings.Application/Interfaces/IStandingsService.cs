@@ -1,4 +1,4 @@
-namespace Region42.ScoresStandings.Application.Interfaces;
+﻿namespace Region42.ScoresStandings.Application.Interfaces;
 
 /// <summary>
 /// Service for calculating standings with support for point-in-time queries.
@@ -53,6 +53,16 @@ public class StandingsResult
 	/// Number of scrimmage rounds included within the currently displayed range.
 	/// </summary>
 	public int ScrimmageRoundsInRange { get; set; }
+
+	/// <summary>
+	/// True if the standings represent the final standings for the season (after the end-of-season tournament or final round is completed).
+	/// </summary>
+	public bool IsFinalStandings { get; set; }
+
+	/// <summary>
+	/// Team ID of the end-of-season tournament champion, when the tournament is completed.
+	/// </summary>
+	public int? TournamentWinnerTeamId { get; set; }
 }
 
 /// <summary>

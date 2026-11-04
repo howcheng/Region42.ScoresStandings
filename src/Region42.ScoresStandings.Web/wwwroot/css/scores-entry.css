@@ -4,6 +4,10 @@
 	width: 70px;
 }
 
+.card-input {
+	width: 58px;
+}
+
 #scoresList {
 	display: flex;
 	flex-direction: column;

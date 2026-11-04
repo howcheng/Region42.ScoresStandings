@@ -1,4 +1,4 @@
-namespace Region42.ScoresStandings.Application.Helpers;
+﻿namespace Region42.ScoresStandings.Application.Helpers;
 
 /// <summary>
 /// Helper for timezone conversions between UTC (storage) and Pacific Time (display).
@@ -16,6 +16,11 @@ public static class TimezoneHelper
 	/// <returns>DateTime in Pacific Time</returns>
 	public static DateTime ToPacificTime(DateTime utcDateTime)
 	{
+		if (utcDateTime == default)
+		{
+			return default;
+		}
+
 		if (utcDateTime.Kind != DateTimeKind.Utc)
 		{
 			throw new ArgumentException("Expected UTC DateTime", nameof(utcDateTime));

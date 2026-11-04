@@ -61,7 +61,13 @@ public class StandingsService : IStandingsService
 			var hasOverCapTeam = maxVolunteerPoints > 0m &&
 				snapshot.Teams.Any(t => t.VolunteerPoints > maxVolunteerPoints);
 
-			if (!hasOverCapTeam)
+			var hasCompletedFinalNotInSnapshot = throughRound == division.TotalRounds &&
+				division.EndOfSeasonTournamentFormat != TournamentFormatType.None &&
+				!snapshot.IsFinalStandings &&
+				_context.Games.OfType<Domain.Entities.EliminationGame>()
+					.Any(g => g.DivisionId == divisionId && g.Stage == TournamentStage.Final && g.Status == GameStatus.Completed);
+
+			if (!hasOverCapTeam && !hasCompletedFinalNotInSnapshot)
 			{
 				var teamsById = _context.Teams.ToDictionary(t => t.Id);
 				return StandingsDocumentMapper.ToEntity(snapshot, divisionId, GetDivisionName(division), teamsById);

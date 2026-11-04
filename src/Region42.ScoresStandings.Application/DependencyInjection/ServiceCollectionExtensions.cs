@@ -1,6 +1,7 @@
-﻿﻿using Microsoft.Extensions.DependencyInjection;
+﻿using Microsoft.Extensions.DependencyInjection;
 using Region42.ScoresStandings.Application.Interfaces;
 using Region42.ScoresStandings.Application.Services;
+using Region42.ScoresStandings.Application.Services.Tournaments;
 
 namespace Region42.ScoresStandings.Application.DependencyInjection;
 
@@ -16,6 +17,9 @@ public static class ServiceCollectionExtensions
 		services.AddScoped<IStandingsService, StandingsService>();
 		services.AddScoped<IStandingsRefreshService, StandingsRefreshService>();
 		services.AddScoped<ICsvImportService, CsvImportService>();
+		services.AddScoped<ITournamentBracketBuilder, SixTeamBracketBuilder>();
+		services.AddScoped<ITournamentBracketBuilderFactory, TournamentBracketBuilderFactory>();
+		services.AddScoped<ITournamentService, TournamentService>();
 
 		return services;
 	}

@@ -369,7 +369,9 @@ public class VolunteerPointsService : IVolunteerPointsService
 				.ToList();
 
 			var games = await _gameService.GetGamesByDivisionAsync(division.Id);
-			var roundByDate = GameRoundCalculator.BuildRoundByDateMap(games.Select(g => g.ScheduledDateTime));
+			var roundByDate = GameRoundCalculator.BuildRoundByDateMap(
+				games.Where(g => g.Status != Domain.Enums.GameStatus.Unscheduled && g.ScheduledDateTime != default)
+					.Select(g => g.ScheduledDateTime));
 
 			context.Divisions.Add(new VolunteerPointsSyncDivisionDto
 			{

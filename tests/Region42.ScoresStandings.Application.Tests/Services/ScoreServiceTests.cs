@@ -1,4 +1,4 @@
-using FluentAssertions;
+﻿using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Region42.ScoresStandings.Application.Interfaces;
@@ -505,6 +505,74 @@ public class ScoreServiceTests
 		// Assert
 		result.Should().BeFalse();
 		_mockScoreRepository.Verify(r => r.Delete(It.IsAny<Score>()), Times.Never);
+	}
+
+	#endregion
+
+	#region Tournament & Elimination Score Tests
+
+	[Fact]
+	public async Task EnterOrUpdateEliminationScoreAsync_WhenTiedWithoutPenalties_ThrowsArgumentException()
+	{
+		var act = async () => await _scoreService.EnterOrUpdateEliminationScoreAsync(
+			gameId: 1,
+			homeScore: 2,
+			awayScore: 2,
+			isForfeit: false,
+			isDecidedByPenalties: false,
+			homePenaltyScore: null,
+			awayPenaltyScore: null);
+
+		await act.Should().ThrowAsync<ArgumentException>()
+			.WithMessage("*require both penalty shootout scores*");
+	}
+
+	[Fact]
+	public async Task EnterOrUpdateEliminationScoreAsync_WhenTiedWithValidPenalties_SavesEliminationScore()
+	{
+		var elimGame = new EliminationGame
+		{
+			Id = 10,
+			DivisionId = 1,
+			Round = 10,
+			Stage = TournamentStage.Semifinal1,
+			HomeTeamId = 1,
+			AwayTeamId = 4,
+			Status = GameStatus.Scheduled
+		};
+
+		_mockGameRepository.Setup(r => r.GetByIdAsync(10)).ReturnsAsync(elimGame);
+		_mockScoreRepository.Setup(r => r.FindAsync(It.IsAny<Expression<Func<Score, bool>>>())).ReturnsAsync(new List<Score>());
+		_mockScoreRepository.Setup(r => r.AddAsync(It.IsAny<Score>())).Returns(Task.CompletedTask);
+		_mockScoreRepository.Setup(r => r.SaveChangesAsync()).ReturnsAsync(1);
+
+		var result = await _scoreService.EnterOrUpdateEliminationScoreAsync(
+			gameId: 10,
+			homeScore: 1,
+			awayScore: 1,
+			isForfeit: false,
+			isDecidedByPenalties: true,
+			homePenaltyScore: 4,
+			awayPenaltyScore: 3);
+
+		result.Should().BeOfType<EliminationScore>();
+		result.IsDecidedByPenalties.Should().BeTrue();
+		result.HomePenaltyScore.Should().Be(4);
+		result.AwayPenaltyScore.Should().Be(3);
+		elimGame.TryGetWinnerTeamId().Should().Be(1);
+	}
+
+	[Fact]
+	public async Task EnterOrUpdatePoolPlayScoreAsync_WhenForfeitWithInvalidScore_ThrowsArgumentException()
+	{
+		var act = async () => await _scoreService.EnterOrUpdatePoolPlayScoreAsync(
+			gameId: 20,
+			homeScore: 2,
+			awayScore: 0,
+			isForfeit: true);
+
+		await act.Should().ThrowAsync<ArgumentException>()
+			.WithMessage("*1-0 or 0-1*");
 	}
 
 	#endregion

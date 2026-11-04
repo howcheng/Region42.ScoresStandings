@@ -14,6 +14,8 @@ public static class StandingsDocumentMapper
 			CalculatedAt = result.CalculatedAt,
 			ScrimmageRounds = result.ScrimmageRounds,
 			ScrimmageRoundsInRange = result.ScrimmageRoundsInRange,
+			IsFinalStandings = result.IsFinalStandings,
+			TournamentWinnerTeamId = result.TournamentWinnerTeamId,
 			Teams = result.Standings.Select(ToDocument).ToList()
 		};
 	}
@@ -32,6 +34,8 @@ public static class StandingsDocumentMapper
 			CalculatedAt = doc.CalculatedAt,
 			ScrimmageRounds = doc.ScrimmageRounds,
 			ScrimmageRoundsInRange = doc.ScrimmageRoundsInRange,
+			IsFinalStandings = doc.IsFinalStandings,
+			TournamentWinnerTeamId = doc.TournamentWinnerTeamId,
 			Standings = doc.Teams.Select(teamDoc => ToEntity(teamDoc, teamsById)).ToList()
 		};
 	}

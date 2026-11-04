@@ -1,4 +1,5 @@
-﻿using Region42.ScoresStandings.Application.Interfaces;
+﻿using Region42.ScoresStandings.Application.DTOs;
+using Region42.ScoresStandings.Application.Interfaces;
 
 namespace Region42.ScoresStandings.Web.Models;
 
@@ -16,6 +17,9 @@ public class StandingsViewModel
 	public DateTime CalculatedAt { get; set; }
 	public List<TeamStanding> Standings { get; set; } = new();
 	public List<GameScoreDisplay> Scores { get; set; } = new();
+	public TournamentDisplayDto? Tournament { get; set; }
+	public bool IsFinalStandings { get; set; }
+	public int? TournamentWinnerTeamId { get; set; }
 
 	/// <summary>
 	/// Number of leading rounds configured as scrimmages for this division.
