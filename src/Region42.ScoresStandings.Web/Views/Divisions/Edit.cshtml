@@ -46,6 +46,19 @@
 			</div>
 
 			<div class="mb-3">
+				<label asp-for="EndOfSeasonTournamentFormat" class="form-label">End-of-Season Tournament Format</label>
+				<select asp-for="EndOfSeasonTournamentFormat" class="form-select">
+					<option value="@((int)Region42.ScoresStandings.Domain.Enums.TournamentFormatType.None)">None (Regular Season Only)</option>
+					<option value="@((int)Region42.ScoresStandings.Domain.Enums.TournamentFormatType.Bracket)">Bracket (Single Elimination)</option>
+					<option value="@((int)Region42.ScoresStandings.Domain.Enums.TournamentFormatType.PoolPlayWithFinal)">Pool Play with Final (AYSO 10-Point System)</option>
+				</select>
+				<span asp-validation-for="EndOfSeasonTournamentFormat" class="text-danger"></span>
+				<small class="form-text text-muted">
+					When enabled, the final round (Round @Model.TotalRounds) becomes an end-of-season tournament whose winner earns a playoff berth.
+				</small>
+			</div>
+
+			<div class="mb-3">
 				<label asp-for="CustomMessage" class="form-label">Custom Message (Bulletin)</label>
 				<textarea asp-for="CustomMessage" class="form-control" rows="3" placeholder="e.g. 10UB was granted an extra playoff spot due to tiebreakers."></textarea>
 				<span asp-validation-for="CustomMessage" class="text-danger"></span>

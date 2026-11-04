@@ -547,4 +547,93 @@ public class ScoresControllerTests
 			s => s.EnterOrUpdateScoreAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<int>()),
 			Times.Exactly(2));
 	}
+
+	[Fact]
+	public async Task Entry_Post_WithTournamentGamesAllowingSameTeamInMultipleMatches_SavesEliminationAndPoolScores()
+	{
+		var poolGame = new PoolPlayGame
+		{
+			Id = 901,
+			DivisionId = 1,
+			Round = 10,
+			Stage = TournamentStage.PoolPlay1,
+			HomeTeamId = 1,
+			AwayTeamId = 2
+		};
+
+		var finalGame = new EliminationGame
+		{
+			Id = 902,
+			DivisionId = 1,
+			Round = 10,
+			Stage = TournamentStage.Final,
+			HomeTeamId = 1,
+			AwayTeamId = 2
+		};
+
+		_mockGameService.Setup(s => s.GetGameByIdAsync(901)).ReturnsAsync(poolGame);
+		_mockGameService.Setup(s => s.GetGameByIdAsync(902)).ReturnsAsync(finalGame);
+		_mockGameService.Setup(s => s.GetGamesByDivisionAndRoundAsync(1, 10)).ReturnsAsync(new List<Game> { poolGame, finalGame });
+		_mockScoreService.Setup(s => s.EnterOrUpdatePoolPlayScoreAsync(901, 2, 1, false, 0, 0, 1, 0))
+			.ReturnsAsync(new PoolPlayScore());
+		_mockScoreService.Setup(s => s.EnterOrUpdateEliminationScoreAsync(902, 1, 1, false, true, 4, 3))
+			.ReturnsAsync(new EliminationScore());
+
+		var scores = new List<ScoreUpdateDto>
+		{
+			new ScoreUpdateDto { GameId = 901, HomeTeamId = 1, AwayTeamId = 2, HomeScore = 2, AwayScore = 1, HomeYellowCards = 1 },
+			new ScoreUpdateDto { GameId = 902, HomeTeamId = 1, AwayTeamId = 2, HomeScore = 1, AwayScore = 1, IsDecidedByPenalties = true, HomePenaltyScore = 4, AwayPenaltyScore = 3 }
+		};
+
+		var result = await _controller.Entry(scores, 1, 10);
+
+		result.Should().BeOfType<RedirectToActionResult>();
+		_controller.TempData["ErrorMessage"].Should().BeNull();
+		_mockScoreService.Verify(s => s.EnterOrUpdatePoolPlayScoreAsync(901, 2, 1, false, 0, 0, 1, 0), Times.Once);
+		_mockScoreService.Verify(s => s.EnterOrUpdateEliminationScoreAsync(902, 1, 1, false, true, 4, 3), Times.Once);
+	}
+
+	[Fact]
+	public async Task Entry_Post_WithUnscheduledGameAndNewDateTimeAndLocation_SchedulesGameInPlaceWithoutCreatingMakeupGame()
+	{
+		var unscheduledGame = new EliminationGame
+		{
+			Id = 910,
+			DivisionId = 1,
+			Round = 10,
+			Stage = TournamentStage.Semifinal1,
+			HomeTeamId = 1,
+			AwayTeamId = 4,
+			ScheduledDateTime = default,
+			Location = string.Empty,
+			Status = GameStatus.Unscheduled
+		};
+
+		_mockGameService.Setup(s => s.GetGameByIdAsync(910)).ReturnsAsync(unscheduledGame);
+		_mockGameService.Setup(s => s.GetGamesByDivisionAndRoundAsync(1, 10)).ReturnsAsync(new List<Game> { unscheduledGame });
+		_mockGameService.Setup(s => s.UpdateGameAsync(It.IsAny<Game>())).ReturnsAsync((Game g) => g);
+
+		var scores = new List<ScoreUpdateDto>
+		{
+			new ScoreUpdateDto
+			{
+				GameId = 910,
+				HomeTeamId = 1,
+				AwayTeamId = 4,
+				Status = GameStatus.Unscheduled,
+				NewScheduledDateTime = new DateTime(2026, 11, 7, 10, 30, 0),
+				NewLocation = "Dos Vientos 1 - Dos Vientos Community Park"
+			}
+		};
+
+		var result = await _controller.Entry(scores, 1, 10);
+
+		result.Should().BeOfType<RedirectToActionResult>();
+		_controller.TempData["ErrorMessage"].Should().BeNull();
+		unscheduledGame.Status.Should().Be(GameStatus.Scheduled);
+		unscheduledGame.Location.Should().Be("Dos Vientos 1 - Dos Vientos Community Park");
+		unscheduledGame.ScheduledDateTime.Should().NotBe(default);
+		unscheduledGame.RescheduledToGameId.Should().BeNull();
+		_mockGameService.Verify(s => s.CreateGameAsync(It.IsAny<Game>()), Times.Never);
+	}
 }

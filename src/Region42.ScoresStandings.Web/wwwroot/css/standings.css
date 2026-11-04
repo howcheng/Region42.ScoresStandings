@@ -50,3 +50,16 @@ html[data-bs-theme="dark"] .list-group-item:hover {
 	background-color: #2a2a2a;
 }
 
+.tournament-match-item {
+	border-left: 4px solid #198754;
+}
+
+#poolStandingsTable tbody tr.table-info {
+	background-color: #cff4fc !important;
+}
+
+html[data-bs-theme="dark"] #poolStandingsTable tbody tr.table-info {
+	background-color: #083344 !important;
+	color: #e0e0e0;
+}
+

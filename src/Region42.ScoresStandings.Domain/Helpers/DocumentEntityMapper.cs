@@ -53,16 +53,29 @@ public static class DocumentEntityMapper
 
 	public static Division ToEntity(DivisionDocument doc, int seasonId)
 	{
+		var ageGroup = DivisionKeyHelper.ParseAgeGroup(doc.AgeGroup);
+		var tournamentFormat = !string.IsNullOrWhiteSpace(doc.EndOfSeasonTournamentFormat) &&
+			Enum.TryParse<TournamentFormatType>(doc.EndOfSeasonTournamentFormat, ignoreCase: true, out var parsedFormat)
+				? parsedFormat
+				: ageGroup switch
+				{
+					AgeGroup.U12 => TournamentFormatType.Bracket,
+					AgeGroup.U14 => TournamentFormatType.PoolPlayWithFinal,
+					_ => TournamentFormatType.None
+				};
+
 		return new Division
 		{
 			Id = doc.Id,
 			SeasonId = seasonId,
-			AgeGroup = DivisionKeyHelper.ParseAgeGroup(doc.AgeGroup),
+			AgeGroup = ageGroup,
 			Gender = DivisionKeyHelper.ParseGender(doc.Gender),
 			TotalRounds = doc.TotalRounds,
 			PlayoffSpots = doc.PlayoffSpots,
 			ScrimmageRounds = doc.ScrimmageRounds,
-			CustomMessage = doc.CustomMessage
+			CustomMessage = doc.CustomMessage,
+			EndOfSeasonTournamentFormat = tournamentFormat,
+			PoolPlayTiebreakerWinnerTeamId = doc.PoolPlayTiebreakerWinnerTeamId
 		};
 	}
 
@@ -78,6 +91,8 @@ public static class DocumentEntityMapper
 			PlayoffSpots = entity.PlayoffSpots,
 			ScrimmageRounds = entity.ScrimmageRounds,
 			CustomMessage = entity.CustomMessage,
+			EndOfSeasonTournamentFormat = entity.EndOfSeasonTournamentFormat.ToString(),
+			PoolPlayTiebreakerWinnerTeamId = entity.PoolPlayTiebreakerWinnerTeamId,
 			Teams = teams.Select(ToDocument).ToList()
 		};
 	}
@@ -111,21 +126,56 @@ public static class DocumentEntityMapper
 
 	public static Game ToEntity(GameDocument doc, int divisionId, Team? homeTeam = null, Team? awayTeam = null)
 	{
-		var game = new Game
+		var stage = !string.IsNullOrWhiteSpace(doc.TournamentStage) &&
+			Enum.TryParse<TournamentStage>(doc.TournamentStage, ignoreCase: true, out var parsedStage)
+				? parsedStage
+				: TournamentStage.None;
+
+		Game game;
+		if (stage.IsEliminationStage())
 		{
-			Id = doc.Id,
-			DivisionId = divisionId,
-			Round = doc.Round,
-			ScheduledDateTime = doc.ScheduledDateTime,
-			Location = doc.Location,
-			Status = Enum.Parse<GameStatus>(doc.Status, ignoreCase: true),
-			HomeTeamId = doc.HomeTeamId,
-			AwayTeamId = doc.AwayTeamId,
-			RescheduledToGameId = doc.RescheduledToGameId,
-			RescheduledFromGameId = doc.RescheduledFromGameId,
-			ModifiedAt = doc.ModifiedAt,
-			ModifiedBy = doc.ModifiedBy
-		};
+			game = new EliminationGame
+			{
+				Stage = stage,
+				HomeTeamPlaceholder = doc.HomeTeamPlaceholder,
+				AwayTeamPlaceholder = doc.AwayTeamPlaceholder
+			};
+		}
+		else if (stage.IsPoolPlayStage())
+		{
+			game = new PoolPlayGame
+			{
+				Stage = stage,
+				HomeTeamPlaceholder = doc.HomeTeamPlaceholder,
+				AwayTeamPlaceholder = doc.AwayTeamPlaceholder
+			};
+		}
+		else if (stage != TournamentStage.None)
+		{
+			game = new TournamentGame
+			{
+				Stage = stage,
+				HomeTeamPlaceholder = doc.HomeTeamPlaceholder,
+				AwayTeamPlaceholder = doc.AwayTeamPlaceholder
+			};
+		}
+		else
+		{
+			game = new Game();
+		}
+
+		game.Id = doc.Id;
+		game.DivisionId = divisionId;
+		game.Round = doc.Round;
+		game.ScheduledDateTime = doc.ScheduledDateTime;
+		game.Location = doc.Location;
+		game.Status = Enum.Parse<GameStatus>(doc.Status, ignoreCase: true);
+		game.HomeTeamId = doc.HomeTeamId;
+		game.AwayTeamId = doc.AwayTeamId;
+		game.RescheduledToGameId = doc.RescheduledToGameId;
+		game.RescheduledFromGameId = doc.RescheduledFromGameId;
+		game.ModifiedAt = doc.ModifiedAt;
+		game.ModifiedBy = doc.ModifiedBy;
 
 		if (homeTeam != null)
 		{
@@ -137,16 +187,11 @@ public static class DocumentEntityMapper
 			game.AwayTeam = awayTeam;
 		}
 
-		if (doc.HomeScore.HasValue || doc.AwayScore.HasValue)
+		var score = ToScoreEntity(doc);
+		if (score != null)
 		{
-			game.Score = new Score
-			{
-				GameId = doc.Id,
-				HomeScore = doc.HomeScore,
-				AwayScore = doc.AwayScore,
-				ModifiedAt = doc.ModifiedAt,
-				ModifiedBy = doc.ModifiedBy
-			};
+			score.Game = game;
+			game.Score = score;
 		}
 
 		return game;
@@ -154,7 +199,7 @@ public static class DocumentEntityMapper
 
 	public static GameDocument ToDocument(Game entity)
 	{
-		return new GameDocument
+		var doc = new GameDocument
 		{
 			Id = entity.Id,
 			Round = entity.Round,
@@ -170,6 +215,35 @@ public static class DocumentEntityMapper
 			ModifiedAt = entity.ModifiedAt,
 			ModifiedBy = entity.ModifiedBy
 		};
+
+		if (entity is TournamentGame tournamentGame && tournamentGame.Stage != TournamentStage.None)
+		{
+			doc.TournamentStage = tournamentGame.Stage.ToString();
+			doc.HomeTeamPlaceholder = tournamentGame.HomeTeamPlaceholder;
+			doc.AwayTeamPlaceholder = tournamentGame.AwayTeamPlaceholder;
+		}
+
+		if (entity.Score is TournamentScore tournamentScore)
+		{
+			doc.IsForfeit = tournamentScore.IsForfeit;
+		}
+
+		if (entity.Score is EliminationScore eliminationScore)
+		{
+			doc.IsDecidedByPenalties = eliminationScore.IsDecidedByPenalties;
+			doc.HomePenaltyScore = eliminationScore.HomePenaltyScore;
+			doc.AwayPenaltyScore = eliminationScore.AwayPenaltyScore;
+		}
+
+		if (entity.Score is PoolPlayScore poolPlayScore)
+		{
+			doc.HomeRedCards = poolPlayScore.HomeRedCards;
+			doc.AwayRedCards = poolPlayScore.AwayRedCards;
+			doc.HomeYellowCards = poolPlayScore.HomeYellowCards;
+			doc.AwayYellowCards = poolPlayScore.AwayYellowCards;
+		}
+
+		return doc;
 	}
 
 	public static Score ToEntity(Score? score, Game game)
@@ -191,15 +265,53 @@ public static class DocumentEntityMapper
 			return null;
 		}
 
-		return new Score
+		var stage = !string.IsNullOrWhiteSpace(doc.TournamentStage) &&
+			Enum.TryParse<TournamentStage>(doc.TournamentStage, ignoreCase: true, out var parsedStage)
+				? parsedStage
+				: TournamentStage.None;
+
+		Score score;
+		if (stage.IsEliminationStage())
 		{
-			Id = doc.Id,
-			GameId = doc.Id,
-			HomeScore = doc.HomeScore,
-			AwayScore = doc.AwayScore,
-			ModifiedAt = doc.ModifiedAt,
-			ModifiedBy = doc.ModifiedBy
-		};
+			score = new EliminationScore
+			{
+				IsForfeit = doc.IsForfeit,
+				IsDecidedByPenalties = doc.IsDecidedByPenalties,
+				HomePenaltyScore = doc.HomePenaltyScore,
+				AwayPenaltyScore = doc.AwayPenaltyScore
+			};
+		}
+		else if (stage.IsPoolPlayStage())
+		{
+			score = new PoolPlayScore
+			{
+				IsForfeit = doc.IsForfeit,
+				HomeRedCards = doc.HomeRedCards,
+				AwayRedCards = doc.AwayRedCards,
+				HomeYellowCards = doc.HomeYellowCards,
+				AwayYellowCards = doc.AwayYellowCards
+			};
+		}
+		else if (stage != TournamentStage.None)
+		{
+			score = new TournamentScore
+			{
+				IsForfeit = doc.IsForfeit
+			};
+		}
+		else
+		{
+			score = new Score();
+		}
+
+		score.Id = doc.Id;
+		score.GameId = doc.Id;
+		score.HomeScore = doc.HomeScore;
+		score.AwayScore = doc.AwayScore;
+		score.ModifiedAt = doc.ModifiedAt;
+		score.ModifiedBy = doc.ModifiedBy;
+
+		return score;
 	}
 
 	public static VolunteerPoints ToEntity(VolunteerPointsDocument doc, int id = 0)

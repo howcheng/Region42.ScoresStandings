@@ -762,4 +762,67 @@ public class HomeControllerTests
 						var viewResult = result as ViewResult;
 						viewResult!.Model.Should().BeOfType<ErrorViewModel>();
 					}
+
+					[Fact]
+					public async Task Standings_InTournamentRound_PopulatesTournamentAndIsFinalStandings()
+					{
+						var mockTournamentService = new Mock<ITournamentService>();
+						var controller = new HomeController(
+							_mockStandingsService.Object,
+							_mockGameService.Object,
+							_mockDivisionRepo.Object,
+							_mockSeasonRepo.Object,
+							_mockLogger.Object,
+							mockTournamentService.Object);
+						ControllerTestHelper.SetupControllerContext(controller);
+
+						var season = _builder.BuildSeason();
+						var division = _builder.BuildDivision(season.Id, AgeGroup.U12, Gender.Boys, totalRounds: 10);
+						division.EndOfSeasonTournamentFormat = TournamentFormatType.Bracket;
+
+						var tournamentDisplay = new Region42.ScoresStandings.Application.DTOs.TournamentDisplayDto
+						{
+							DivisionId = division.Id,
+							Format = TournamentFormatType.Bracket,
+							TournamentRound = 10,
+							IsReady = true,
+							IsCompleted = true,
+							ChampionTeamId = 3,
+							ChampionTeamName = "12UB03 Sharks"
+						};
+
+						var standingsResult = new StandingsResult
+						{
+							DivisionId = division.Id,
+							DivisionName = "12U Boys",
+							ThroughRound = 10,
+							IsFinalStandings = true,
+							TournamentWinnerTeamId = 3,
+							CalculatedAt = DateTime.UtcNow,
+							Standings = new List<TeamStanding>
+							{
+								new TeamStanding { Rank = 1, TeamId = 1, TeamName = "12UB01 Jets", QualifiesForPlayoffs = true },
+								new TeamStanding { Rank = 3, TeamId = 3, TeamName = "12UB03 Sharks", QualifiesForPlayoffs = true }
+							}
+						};
+
+						_mockSeasonRepo.Setup(r => r.GetAllAsync()).ReturnsAsync(new List<Season> { season });
+						_mockDivisionRepo.Setup(r => r.FindAsync(It.IsAny<Expression<Func<Division, bool>>>()))
+							.ReturnsAsync(new List<Division> { division });
+						_mockGameService.Setup(s => s.GetGamesByDivisionAndRoundAsync(division.Id, 10))
+							.ReturnsAsync(new List<Game>());
+						mockTournamentService.Setup(t => t.GetTournamentBracketAsync(division.Id))
+							.ReturnsAsync(tournamentDisplay);
+						_mockStandingsService.Setup(s => s.GetStandingsByRoundAsync(division.Id, 10))
+							.ReturnsAsync(standingsResult);
+
+						var result = await controller.Standings(division.Id, 10, null);
+
+						var viewResult = result.Should().BeOfType<ViewResult>().Subject;
+						var model = viewResult.Model.Should().BeOfType<StandingsViewModel>().Subject;
+						model.IsFinalStandings.Should().BeTrue();
+						model.TournamentWinnerTeamId.Should().Be(3);
+						model.Tournament.Should().NotBeNull();
+						model.Tournament!.ChampionTeamName.Should().Be("12UB03 Sharks");
+					}
 				}

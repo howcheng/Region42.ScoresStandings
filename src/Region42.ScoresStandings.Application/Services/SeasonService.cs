@@ -1,4 +1,4 @@
-using Region42.ScoresStandings.Application.Interfaces;
+﻿using Region42.ScoresStandings.Application.Interfaces;
 using Region42.ScoresStandings.Domain.Entities;
 using Region42.ScoresStandings.Domain.Enums;
 using Region42.ScoresStandings.Domain.Interfaces;
@@ -202,7 +202,8 @@ public class SeasonService : ISeasonService
 					AgeGroup = ageGroup,
 					Gender = gender,
 					TotalRounds = 10, // Default 10 rounds
-					PlayoffSpots = 1 // Default 1 playoff spot
+					PlayoffSpots = 1, // Default 1 playoff spot
+					EndOfSeasonTournamentFormat = GetDefaultTournamentFormat(ageGroup)
 				};
 
 				await _divisionRepository.AddAsync(division);
@@ -210,5 +211,15 @@ public class SeasonService : ISeasonService
 		}
 
 		await _divisionRepository.SaveChangesAsync();
+	}
+
+	private static TournamentFormatType GetDefaultTournamentFormat(AgeGroup ageGroup)
+	{
+		return ageGroup switch
+		{
+			AgeGroup.U12 => TournamentFormatType.Bracket,
+			AgeGroup.U14 => TournamentFormatType.PoolPlayWithFinal,
+			_ => TournamentFormatType.None
+		};
 	}
 }

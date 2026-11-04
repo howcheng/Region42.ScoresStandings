@@ -860,5 +860,179 @@ public class StandingsServiceTests
 		standing.TotalPoints.Should().Be(9m);
 	}
 
+	[Fact]
+	public async Task CalculateStandings_TieBreaker_UsesGamePointsThenHeadToHeadBeforeGoalDifferential()
+	{
+		var division = TestDataBuilder.CreateDivision(id: 1, totalRounds: 10);
+		var teamA = TestDataBuilder.CreateTeam(id: 1, divisionId: 1, name: "Team A");
+		var teamB = TestDataBuilder.CreateTeam(id: 2, divisionId: 1, name: "Team B");
+		var teamC = TestDataBuilder.CreateTeam(id: 3, divisionId: 1, name: "Team C");
+
+		// Team A: 1 win (3 GP) + 3 VP = 6 TotalPoints
+		// Team B: 2 wins (6 GP) + 0 VP = 6 TotalPoints (lost H2H to Team C, but has +5 GD)
+		// Team C: 2 wins (6 GP) + 0 VP = 6 TotalPoints (beat Team B in H2H, has +1 GD)
+		var g1 = TestDataBuilder.CreateGame(id: 1, divisionId: 1, homeTeamId: 3, awayTeamId: 2, round: 1, status: GameStatus.Completed);
+		var s1 = TestDataBuilder.CreateScore(id: 1, gameId: 1, homeScore: 1, awayScore: 0); // Team C beats Team B H2H
+
+		var g2 = TestDataBuilder.CreateGame(id: 2, divisionId: 1, homeTeamId: 3, awayTeamId: 1, round: 2, status: GameStatus.Completed);
+		var s2 = TestDataBuilder.CreateScore(id: 2, gameId: 2, homeScore: 1, awayScore: 0); // Team C 2nd win
+
+		var g3 = TestDataBuilder.CreateGame(id: 3, divisionId: 1, homeTeamId: 2, awayTeamId: 1, round: 3, status: GameStatus.Completed);
+		var s3 = TestDataBuilder.CreateScore(id: 3, gameId: 3, homeScore: 3, awayScore: 0); // Team B 1st win
+
+		var g4 = TestDataBuilder.CreateGame(id: 4, divisionId: 1, homeTeamId: 2, awayTeamId: 1, round: 4, status: GameStatus.Completed);
+		var s4 = TestDataBuilder.CreateScore(id: 4, gameId: 4, homeScore: 3, awayScore: 0); // Team B 2nd win
+
+		var g5 = TestDataBuilder.CreateGame(id: 5, divisionId: 1, homeTeamId: 1, awayTeamId: 3, round: 5, status: GameStatus.Completed);
+		var s5 = TestDataBuilder.CreateScore(id: 5, gameId: 5, homeScore: 2, awayScore: 1); // Team A 1st win
+
+		var vpA = TestDataBuilder.CreateVolunteerPoints(id: 1, teamId: 1, round: 1, points: 3m);
+
+		SetupBasicMocks(
+			division,
+			[teamA, teamB, teamC],
+			[g1, g2, g3, g4, g5],
+			[s1, s2, s3, s4, s5],
+			[vpA]);
+
+		var result = await _service.GetStandingsByRoundAsync(1, 5);
+
+		// Team C and Team B have 6 GamePoints vs Team A's 3 GamePoints; Team C beat Team B head-to-head
+		result.Standings[0].TeamId.Should().Be(3);
+		result.Standings[1].TeamId.Should().Be(2);
+		result.Standings[2].TeamId.Should().Be(1);
+	}
+
+	[Fact]
+	public async Task CalculateStandings_ExcludesTournamentGameScoresButIncludesRound10VolunteerPointsAndCascadesPlayoffBerth()
+	{
+		var division = TestDataBuilder.CreateDivision(id: 1, ageGroup: AgeGroup.U12, gender: Gender.Boys, totalRounds: 10);
+		division.EndOfSeasonTournamentFormat = TournamentFormatType.Bracket;
+		division.PlayoffSpots = 2;
+
+		var team1 = TestDataBuilder.CreateTeam(id: 1, divisionId: 1, name: "12UB01 Team 1");
+		var team2 = TestDataBuilder.CreateTeam(id: 2, divisionId: 1, name: "12UB02 Team 2");
+		var team3 = TestDataBuilder.CreateTeam(id: 3, divisionId: 1, name: "12UB03 Team 3");
+
+		// Regular season: Team 1 = 6 GP, Team 2 = 3 GP, Team 3 = 0 GP
+		var reg1 = TestDataBuilder.CreateGame(id: 1, divisionId: 1, homeTeamId: 1, awayTeamId: 2, round: 9, status: GameStatus.Completed);
+		var regScore1 = TestDataBuilder.CreateScore(id: 1, gameId: 1, homeScore: 2, awayScore: 0);
+		var reg2 = TestDataBuilder.CreateGame(id: 2, divisionId: 1, homeTeamId: 1, awayTeamId: 3, round: 9, status: GameStatus.Completed);
+		var regScore2 = TestDataBuilder.CreateScore(id: 2, gameId: 2, homeScore: 2, awayScore: 0);
+		var reg3 = TestDataBuilder.CreateGame(id: 3, divisionId: 1, homeTeamId: 2, awayTeamId: 3, round: 9, status: GameStatus.Completed);
+		var regScore3 = TestDataBuilder.CreateScore(id: 3, gameId: 3, homeScore: 1, awayScore: 0);
+
+		// Round 10 Tournament Final: Team 3 beats Team 1 in the Final (should NOT add to Team 3's regular season GamePoints, but makes Team 3 Tournament Champion)
+		var finalGame = new EliminationGame
+		{
+			Id = 10,
+			DivisionId = 1,
+			Round = 10,
+			Stage = TournamentStage.Final,
+			HomeTeamId = 1,
+			AwayTeamId = 3,
+			Status = GameStatus.Completed
+		};
+		var finalScore = new EliminationScore
+		{
+			Id = 10,
+			GameId = 10,
+			Game = finalGame,
+			HomeScore = 0,
+			AwayScore = 2
+		};
+		finalGame.Score = finalScore;
+
+		// Volunteer points (including Round 10 volunteer points for Team 3)
+		var vp1 = TestDataBuilder.CreateVolunteerPoints(id: 1, teamId: 1, round: 9, points: 4m);
+		var vp2 = TestDataBuilder.CreateVolunteerPoints(id: 2, teamId: 2, round: 9, points: 4m);
+		var vp3 = TestDataBuilder.CreateVolunteerPoints(id: 3, teamId: 3, round: 10, points: 4m);
+
+		var settings = new Settings { Id = 1, MinVolunteerPointsForPlayoff = 3, DefaultPlayoffSpots = 2 };
+
+		SetupBasicMocks(
+			division,
+			[team1, team2, team3],
+			[reg1, reg2, reg3, finalGame],
+			[regScore1, regScore2, regScore3, finalScore],
+			[vp1, vp2, vp3],
+			settings);
+
+		var r10Standings = await _service.GetStandingsByRoundAsync(1, 10);
+
+		r10Standings.IsFinalStandings.Should().BeTrue();
+		r10Standings.TournamentWinnerTeamId.Should().Be(3);
+
+		var t3Standing = r10Standings.Standings.First(s => s.TeamId == 3);
+		t3Standing.GamePoints.Should().Be(0); // Tournament final win does not add regular-season game points
+		t3Standing.VolunteerPoints.Should().Be(4m); // Round 10 volunteer points ARE included
+		t3Standing.QualifiesForPlayoffs.Should().BeTrue(); // Qualifies as Tournament Champion!
+
+		var t1Standing = r10Standings.Standings.First(s => s.TeamId == 1);
+		t1Standing.QualifiesForPlayoffs.Should().BeTrue(); // Top team in standings
+
+		var t2Standing = r10Standings.Standings.First(s => s.TeamId == 2);
+		t2Standing.QualifiesForPlayoffs.Should().BeFalse(); // 2nd berth went to Tournament Champion (Team 3)
+	}
+
+	[Fact]
+	public async Task CalculateStandings_WhenTopTeamWinsTournament_CascadesPlayoffBerthToNextEligibleTeam()
+	{
+		var division = TestDataBuilder.CreateDivision(id: 1, ageGroup: AgeGroup.U12, gender: Gender.Boys, totalRounds: 10);
+		division.EndOfSeasonTournamentFormat = TournamentFormatType.Bracket;
+		division.PlayoffSpots = 2;
+
+		var team1 = TestDataBuilder.CreateTeam(id: 1, divisionId: 1, name: "12UB01 Team 1");
+		var team2 = TestDataBuilder.CreateTeam(id: 2, divisionId: 1, name: "12UB02 Team 2");
+		var team3 = TestDataBuilder.CreateTeam(id: 3, divisionId: 1, name: "12UB03 Team 3");
+
+		var reg1 = TestDataBuilder.CreateGame(id: 1, divisionId: 1, homeTeamId: 1, awayTeamId: 2, round: 9, status: GameStatus.Completed);
+		var regScore1 = TestDataBuilder.CreateScore(id: 1, gameId: 1, homeScore: 3, awayScore: 0);
+		var reg2 = TestDataBuilder.CreateGame(id: 2, divisionId: 1, homeTeamId: 2, awayTeamId: 3, round: 9, status: GameStatus.Completed);
+		var regScore2 = TestDataBuilder.CreateScore(id: 2, gameId: 2, homeScore: 2, awayScore: 0);
+
+		// Team 1 (Rank 1) also wins the Tournament Final
+		var finalGame = new EliminationGame
+		{
+			Id = 10,
+			DivisionId = 1,
+			Round = 10,
+			Stage = TournamentStage.Final,
+			HomeTeamId = 1,
+			AwayTeamId = 2,
+			Status = GameStatus.Completed
+		};
+		var finalScore = new EliminationScore
+		{
+			Id = 10,
+			GameId = 10,
+			Game = finalGame,
+			HomeScore = 2,
+			AwayScore = 1
+		};
+		finalGame.Score = finalScore;
+
+		// Team 2 lacks min volunteer points (only 1 pt), Team 3 has 4 pts -> berth cascades past Team 2 to Team 3!
+		var vp1 = TestDataBuilder.CreateVolunteerPoints(id: 1, teamId: 1, round: 9, points: 5m);
+		var vp2 = TestDataBuilder.CreateVolunteerPoints(id: 2, teamId: 2, round: 9, points: 1m);
+		var vp3 = TestDataBuilder.CreateVolunteerPoints(id: 3, teamId: 3, round: 9, points: 4m);
+
+		var settings = new Settings { Id = 1, MinVolunteerPointsForPlayoff = 3, DefaultPlayoffSpots = 2 };
+
+		SetupBasicMocks(
+			division,
+			[team1, team2, team3],
+			[reg1, reg2, finalGame],
+			[regScore1, regScore2, finalScore],
+			[vp1, vp2, vp3],
+			settings);
+
+		var r10Standings = await _service.GetStandingsByRoundAsync(1, 10);
+
+		r10Standings.Standings.First(s => s.TeamId == 1).QualifiesForPlayoffs.Should().BeTrue();
+		r10Standings.Standings.First(s => s.TeamId == 2).QualifiesForPlayoffs.Should().BeFalse();
+		r10Standings.Standings.First(s => s.TeamId == 3).QualifiesForPlayoffs.Should().BeTrue();
+	}
+
 	#endregion
 }

@@ -1,4 +1,4 @@
-using Region42.ScoresStandings.Domain.Enums;
+﻿using Region42.ScoresStandings.Domain.Enums;
 
 namespace Region42.ScoresStandings.Domain.Entities;
 
@@ -26,6 +26,17 @@ public class Division : BaseEntity
 	/// Custom announcements or notice text for this specific division (per-season, since Divisions are scoped to a Season).
 	/// </summary>
 	public string? CustomMessage { get; set; }
+
+	/// <summary>
+	/// End-of-season tournament format for this division (replaces the final round of regular season games).
+	/// </summary>
+	public TournamentFormatType EndOfSeasonTournamentFormat { get; set; } = TournamentFormatType.None;
+
+	/// <summary>
+	/// Optional manual tiebreaker winner team ID when pool-play teams remain tied through all statistical tiebreakers
+	/// and settle advancement via FIFA kicks from the penalty mark.
+	/// </summary>
+	public int? PoolPlayTiebreakerWinnerTeamId { get; set; }
 
 	public Season Season { get; set; } = null!;
 	public ICollection<Team> Teams { get; set; } = new List<Team>();

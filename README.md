@@ -62,7 +62,10 @@ Instead of scanning the codebase to reconstruct business logic, follow these spe
 *   👉 **[Maintenance Feature Specs](docs/features/maintenance.md)**
 	*   *Covers:* Intelligent automatic season generation (starting August 1), active state transitions, division preference cookieland (July 31 / Dec 31 lifecycle limits), and teams/divs CRUD rules with soft-delete safety bars.
 *   👉 **[Standings Calculation & Playoff Specs](docs/features/standings-view.md)**
-	*   *Covers:* Standard soccer points scoring matrices (3 pts Win, 1 pt Draw, 0 pts Loss), standard AYSO tie-breaker logic, standings adjustments for divisions with an odd number of teams, and play-offs slot designations.
+	*   *Covers:* Standard soccer points scoring matrices (3 pts Win, 1 pt Draw, 0 pts Loss), AYSO tie-breaker logic, end-of-season tournaments (`Bracket` and `PoolPlayWithFinal` with the AYSO 10-point system), and play-offs slot designations.
+	*   *TODOs:*
+		*   Implement `ITournamentBracketBuilder` classes for 3-, 4-, 5-, 7-, and 8-team divisions (6-team `SixTeamBracketBuilder` is implemented for the current season).
+		*   Add a manual tiebreaker override input for cascading regular-season playoff berths if teams remain tied after Game Points and Head-to-Head results.
 
 ---
 

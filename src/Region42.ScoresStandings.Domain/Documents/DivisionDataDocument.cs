@@ -26,6 +26,17 @@ public class GameDocument
 	public int AwayTeamId { get; set; }
 	public int? HomeScore { get; set; }
 	public int? AwayScore { get; set; }
+	public string? TournamentStage { get; set; }
+	public string? HomeTeamPlaceholder { get; set; }
+	public string? AwayTeamPlaceholder { get; set; }
+	public bool IsForfeit { get; set; }
+	public bool IsDecidedByPenalties { get; set; }
+	public int? HomePenaltyScore { get; set; }
+	public int? AwayPenaltyScore { get; set; }
+	public int HomeRedCards { get; set; }
+	public int AwayRedCards { get; set; }
+	public int HomeYellowCards { get; set; }
+	public int AwayYellowCards { get; set; }
 	public int? RescheduledToGameId { get; set; }
 	public int? RescheduledFromGameId { get; set; }
 	public DateTime ModifiedAt { get; set; }
@@ -48,6 +59,8 @@ public class StandingsSnapshotDocument
 	public DateTime CalculatedAt { get; set; }
 	public int ScrimmageRounds { get; set; }
 	public int ScrimmageRoundsInRange { get; set; }
+	public bool IsFinalStandings { get; set; }
+	public int? TournamentWinnerTeamId { get; set; }
 	public List<TeamStandingDocument> Teams { get; set; } = new();
 }
 

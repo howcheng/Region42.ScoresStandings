@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Region42.ScoresStandings.Application.Interfaces;
 using Region42.ScoresStandings.Domain.Entities;
@@ -90,6 +90,7 @@ public class DivisionsController : Controller
 				existing.PlayoffSpots = division.PlayoffSpots;
 				existing.ScrimmageRounds = division.ScrimmageRounds;
 				existing.CustomMessage = division.CustomMessage;
+				existing.EndOfSeasonTournamentFormat = division.EndOfSeasonTournamentFormat;
 
 				_divisionRepository.Update(existing);
 				await _standingsRefreshService.RefreshDivisionStandingsAsync(existing.Id);

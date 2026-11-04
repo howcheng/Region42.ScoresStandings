@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using CsvHelper;
 using CsvHelper.Configuration;
 using Microsoft.Extensions.Logging;
@@ -545,7 +545,13 @@ public class CsvImportService : ICsvImportService
 					SeasonId = seasonId,
 					AgeGroup = ageGroup,
 					Gender = gender,
-					TotalRounds = 10 // Default, can be updated later
+					TotalRounds = 10, // Default, can be updated later
+					EndOfSeasonTournamentFormat = ageGroup switch
+					{
+						AgeGroup.U12 => TournamentFormatType.Bracket,
+						AgeGroup.U14 => TournamentFormatType.PoolPlayWithFinal,
+						_ => TournamentFormatType.None
+					}
 				};
 				await _divisionRepository.AddAsync(division);
 			}
@@ -571,6 +577,14 @@ public class CsvImportService : ICsvImportService
 
 		// Calculate round number based on date using all rows in this division
 		var round = CalculateRound(row.ParsedScheduledDateTime!.Value, allRowsInDivision);
+
+		if (division.EndOfSeasonTournamentFormat != TournamentFormatType.None && round >= division.TotalRounds)
+		{
+			_logger.LogInformation(
+				"Skipping regular season game import for division {DivisionId} in round {Round} because tournament format is {TournamentFormat}",
+				division.Id, round, division.EndOfSeasonTournamentFormat);
+			return;
+		}
 
 		// Create game
 		var game = new Game

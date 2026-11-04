@@ -6,10 +6,14 @@ namespace Region42.ScoresStandings.Application.Services;
 public class StandingsRefreshService : IStandingsRefreshService
 {
 	private readonly ICompetitionDataContext _context;
+	private readonly ITournamentService? _tournamentService;
 
-	public StandingsRefreshService(ICompetitionDataContext context)
+	public StandingsRefreshService(
+		ICompetitionDataContext context,
+		ITournamentService? tournamentService = null)
 	{
 		_context = context;
+		_tournamentService = tournamentService;
 	}
 
 	public async Task RefreshDivisionStandingsAsync(int divisionId)
@@ -18,6 +22,18 @@ public class StandingsRefreshService : IStandingsRefreshService
 
 		var division = _context.Divisions.FirstOrDefault(d => d.Id == divisionId)
 			?? throw new ArgumentException($"Division with ID {divisionId} not found.", nameof(divisionId));
+
+		if (_tournamentService != null && division.EndOfSeasonTournamentFormat != Domain.Enums.TournamentFormatType.None)
+		{
+			try
+			{
+				await _tournamentService.EnsureTournamentGamesAsync(divisionId);
+			}
+			catch (NotSupportedException)
+			{
+				// Ignore when division team count does not have a registered bracket/pool builder yet
+			}
+		}
 
 		var teams = _context.Teams.Where(t => t.DivisionId == divisionId).ToList();
 		var games = _context.Games.Where(g => g.DivisionId == divisionId).ToList();

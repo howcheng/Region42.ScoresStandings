@@ -20,6 +20,8 @@ public class ScoresController : Controller
 	private readonly IRepository<Season> _seasonRepository;
 	private readonly IRepository<Score> _scoreRepository;
 	private readonly ILogger<ScoresController> _logger;
+	private readonly ITournamentService? _tournamentService;
+	private readonly IStandingsRefreshService? _standingsRefreshService;
 
 	public ScoresController(
 		IScoreService scoreService,
@@ -28,7 +30,9 @@ public class ScoresController : Controller
 		IRepository<Division> divisionRepository,
 		IRepository<Season> seasonRepository,
 		IRepository<Score> scoreRepository,
-		ILogger<ScoresController> logger)
+		ILogger<ScoresController> logger,
+		ITournamentService? tournamentService = null,
+		IStandingsRefreshService? standingsRefreshService = null)
 	{
 		_scoreService = scoreService;
 		_gameService = gameService;
@@ -37,6 +41,8 @@ public class ScoresController : Controller
 		_seasonRepository = seasonRepository;
 		_scoreRepository = scoreRepository;
 		_logger = logger;
+		_tournamentService = tournamentService;
+		_standingsRefreshService = standingsRefreshService;
 	}
 
 	// GET: Scores/Entry
@@ -51,19 +57,19 @@ public class ScoresController : Controller
 			return View(new List<ScoreEntryDto>());
 		}
 
-		var divisions = await _divisionRepository.FindAsync(d => d.SeasonId == currentSeason.Id);
+		var divisions = (await _divisionRepository.FindAsync(d => d.SeasonId == currentSeason.Id)).ToList();
 		var divisionList = divisions.Select(d => new
 		{
 			Id = d.Id,
 			Name = $"{d.AgeGroup} {d.Gender}",
-			TotalRounds = d.TotalRounds
+			TotalRounds = d.TotalRounds,
+			EndOfSeasonTournamentFormat = d.EndOfSeasonTournamentFormat
 		}).ToList();
 
 		ViewBag.Divisions = new SelectList(divisionList, "Id", "Name", divisionId);
 
 		if (!divisionId.HasValue)
 		{
-			// No division selected, show empty grid
 			ViewBag.Rounds = new SelectList(Enumerable.Empty<SelectListItem>(), "Value", "Text");
 			return View(new List<ScoreEntryDto>());
 		}
@@ -74,26 +80,42 @@ public class ScoresController : Controller
 			return NotFound();
 		}
 
-		// Create round dropdown (1 to TotalRounds)
+		var hasTournament = selectedDivision.EndOfSeasonTournamentFormat != TournamentFormatType.None;
 		var rounds = Enumerable.Range(1, selectedDivision.TotalRounds)
 			.Select(r => new SelectListItem
 			{
 				Value = r.ToString(),
-				Text = $"Round {r}"
+				Text = hasTournament && r == selectedDivision.TotalRounds
+					? $"Round {r} (Tournament)"
+					: $"Round {r}"
 			});
 		ViewBag.Rounds = new SelectList(rounds, "Value", "Text", round);
 		ViewBag.SelectedDivisionId = divisionId;
 
 		if (!round.HasValue)
 		{
-			// No round selected, show empty grid
 			return View(new List<ScoreEntryDto>());
 		}
 
-		// Get games for selected division and round
-		var games = await _gameService.GetGamesByDivisionAndRoundAsync(divisionId.Value, round.Value);
+		var isTournamentRound = hasTournament && round.Value == selectedDivision.TotalRounds;
+		ViewBag.IsTournamentRound = isTournamentRound;
+		ViewBag.TournamentFormat = selectedDivision.EndOfSeasonTournamentFormat;
 
-		// Get all teams for this division for the dropdowns
+		if (isTournamentRound && _tournamentService != null)
+		{
+			try
+			{
+				await _tournamentService.EnsureTournamentGamesAsync(divisionId.Value);
+				ViewBag.TournamentDisplay = await _tournamentService.GetTournamentBracketAsync(divisionId.Value);
+			}
+			catch (NotSupportedException ex)
+			{
+				ViewBag.ErrorMessage = ex.Message;
+			}
+		}
+
+		var games = (await _gameService.GetGamesByDivisionAndRoundAsync(divisionId.Value, round.Value)).ToList();
+
 		var teams = await _teamService.GetTeamsByDivisionAsync(divisionId.Value);
 		var teamList = teams.Select(t => new SelectListItem
 		{
@@ -102,9 +124,13 @@ public class ScoresController : Controller
 		}).ToList();
 		ViewBag.Teams = teamList;
 
-		// Build score entry DTOs
 		var scoreEntries = new List<ScoreEntryDto>();
-		foreach (var game in games.OrderBy(g => g.ScheduledDateTime))
+		var orderedGames = games
+			.OrderBy(g => g is TournamentGame tg ? (int)tg.Stage : 0)
+			.ThenBy(g => g.ScheduledDateTime)
+			.ToList();
+
+		foreach (var game in orderedGames)
 		{
 			var score = await _scoreService.GetScoreByGameIdAsync(game.Id);
 			Game? makeupGame = null;
@@ -113,28 +139,11 @@ public class ScoresController : Controller
 				makeupGame = await _gameService.GetGameByIdAsync(game.RescheduledToGameId.Value);
 			}
 
-			scoreEntries.Add(new ScoreEntryDto
-			{
-				GameId = game.Id,
-				HomeTeamId = game.HomeTeamId,
-				HomeTeamName = game.HomeTeam?.Name ?? "Unknown",
-				AwayTeamId = game.AwayTeamId,
-				AwayTeamName = game.AwayTeam?.Name ?? "Unknown",
-				ScheduledDateTime = TimezoneHelper.ToPacificTime(game.ScheduledDateTime),
-				Location = game.Location,
-				Round = game.Round,
-				Status = game.Status,
-				HomeScore = score?.HomeScore,
-				AwayScore = score?.AwayScore,
-				LastModified = score?.ModifiedAt,
-				LastModifiedBy = score?.ModifiedBy,
-				RescheduledDateTime = makeupGame != null ? TimezoneHelper.ToPacificTime(makeupGame.ScheduledDateTime) : null,
-				RescheduledLocation = makeupGame?.Location,
-				RescheduledRound = makeupGame?.Round
-			});
+			scoreEntries.Add(BuildScoreEntryDto(game, score, makeupGame));
 		}
 
 		ViewBag.SelectedRound = round;
+		ViewBag.HasEnteredTournamentScores = isTournamentRound && scoreEntries.Any(s => s.HomeScore.HasValue || s.AwayScore.HasValue);
 
 		return View(scoreEntries);
 	}
@@ -142,7 +151,11 @@ public class ScoresController : Controller
 	// POST: Scores/Entry
 	[HttpPost]
 	[ValidateAntiForgeryToken]
-	public async Task<IActionResult> Entry(List<ScoreUpdateDto> scores, int divisionId, int round)
+	public async Task<IActionResult> Entry(
+		List<ScoreUpdateDto> scores,
+		int divisionId,
+		int round,
+		int? poolPlayTiebreakerWinnerTeamId = null)
 	{
 		if (scores == null || !scores.Any())
 		{
@@ -150,21 +163,22 @@ public class ScoresController : Controller
 			return RedirectToAction(nameof(Entry), new { divisionId, round });
 		}
 
-		// Validate home/away teams differ, and validate team uniqueness per round
-		// (excluding rescheduled games and makeup games).
 		var batchGamesById = new Dictionary<int, Game>();
 		foreach (var score in scores)
 		{
-			if (score.HomeTeamId == score.AwayTeamId)
-			{
-				TempData["ErrorMessage"] = "A team cannot play against itself. Please check the schedule.";
-				return RedirectToAction(nameof(Entry), new { divisionId, round });
-			}
-
 			var existingGame = await _gameService.GetGameByIdAsync(score.GameId);
 			if (existingGame != null)
 			{
 				batchGamesById[score.GameId] = existingGame;
+			}
+
+			var isUnassignedTournamentMatch = existingGame is TournamentGame &&
+				(score.HomeTeamId == 0 || score.AwayTeamId == 0);
+
+			if (!isUnassignedTournamentMatch && score.HomeTeamId == score.AwayTeamId)
+			{
+				TempData["ErrorMessage"] = "A team cannot play against itself. Please check the schedule.";
+				return RedirectToAction(nameof(Entry), new { divisionId, round });
 			}
 		}
 
@@ -178,7 +192,8 @@ public class ScoresController : Controller
 				continue;
 			}
 
-			if (batchGamesById.TryGetValue(score.GameId, out var batchGame) && batchGame.RescheduledFromGameId.HasValue)
+			if (batchGamesById.TryGetValue(score.GameId, out var batchGame) &&
+				(batchGame.RescheduledFromGameId.HasValue || batchGame is TournamentGame))
 			{
 				continue;
 			}
@@ -190,6 +205,7 @@ public class ScoresController : Controller
 		var existingGamesInRound = await _gameService.GetGamesByDivisionAndRoundAsync(divisionId, round);
 		foreach (var existingGame in existingGamesInRound.Where(g =>
 			!batchGameIds.Contains(g.Id) &&
+			g is not TournamentGame &&
 			g.Status != GameStatus.Rescheduled &&
 			!g.RescheduledFromGameId.HasValue))
 		{
@@ -211,12 +227,12 @@ public class ScoresController : Controller
 		var successCount = 0;
 		var errorCount = 0;
 		var errors = new List<string>();
+		var hasTournamentGames = false;
 
 		foreach (var scoreUpdate in scores)
 		{
 			try
 			{
-				// First, update the game teams if they changed
 				var game = await _gameService.GetGameByIdAsync(scoreUpdate.GameId);
 				if (game == null)
 				{
@@ -225,7 +241,11 @@ public class ScoresController : Controller
 					continue;
 				}
 
-				// Validate partial score entry - both scores must be entered or both must be empty
+				if (game is TournamentGame)
+				{
+					hasTournamentGames = true;
+				}
+
 				var hasHomeScore = scoreUpdate.HomeScore.HasValue;
 				var hasAwayScore = scoreUpdate.AwayScore.HasValue;
 				if (hasHomeScore != hasAwayScore)
@@ -236,7 +256,6 @@ public class ScoresController : Controller
 					continue;
 				}
 
-				// Validate rescheduled games have a new date/time
 				if (scoreUpdate.Status == GameStatus.Rescheduled && !scoreUpdate.NewScheduledDateTime.HasValue)
 				{
 					errorCount++;
@@ -245,8 +264,21 @@ public class ScoresController : Controller
 					continue;
 				}
 
+				var wasUnscheduled = game.Status == GameStatus.Unscheduled;
+				if (wasUnscheduled &&
+					scoreUpdate.Status == GameStatus.Scheduled &&
+					!scoreUpdate.NewScheduledDateTime.HasValue &&
+					!(hasHomeScore && hasAwayScore))
+				{
+					errorCount++;
+					errors.Add($"Game {scoreUpdate.GameId}: A date/time is required when marking an unscheduled game as Scheduled.");
+					_logger.LogWarning("Unscheduled game {GameId} marked Scheduled without date/time", scoreUpdate.GameId);
+					continue;
+				}
+
 				bool gameChanged = false;
-				if (game.HomeTeamId != scoreUpdate.HomeTeamId || game.AwayTeamId != scoreUpdate.AwayTeamId)
+				if (scoreUpdate.HomeTeamId > 0 && scoreUpdate.AwayTeamId > 0 &&
+					(game.HomeTeamId != scoreUpdate.HomeTeamId || game.AwayTeamId != scoreUpdate.AwayTeamId))
 				{
 					game.HomeTeamId = scoreUpdate.HomeTeamId;
 					game.AwayTeamId = scoreUpdate.AwayTeamId;
@@ -258,6 +290,40 @@ public class ScoresController : Controller
 					game.Status = scoreUpdate.Status;
 					gameChanged = true;
 					_logger.LogInformation("Updated status for game {GameId} to {Status}", scoreUpdate.GameId, scoreUpdate.Status);
+				}
+
+				if (scoreUpdate.Status == GameStatus.Unscheduled || (wasUnscheduled && scoreUpdate.Status != GameStatus.Rescheduled))
+				{
+					if (scoreUpdate.NewScheduledDateTime.HasValue)
+					{
+						game.ScheduledDateTime = TimezoneHelper.ToUtc(scoreUpdate.NewScheduledDateTime.Value);
+						if (!string.IsNullOrWhiteSpace(scoreUpdate.NewLocation))
+						{
+							game.Location = scoreUpdate.NewLocation.Trim();
+						}
+						if (game.Status == GameStatus.Unscheduled)
+						{
+							game.Status = GameStatus.Scheduled;
+						}
+						gameChanged = true;
+						_logger.LogInformation("Scheduled game {GameId} on {ScheduledDateTime} at {Location}",
+							scoreUpdate.GameId, game.ScheduledDateTime, game.Location);
+					}
+					else
+					{
+						if (scoreUpdate.Status == GameStatus.Unscheduled && game.ScheduledDateTime != default)
+						{
+							game.ScheduledDateTime = default;
+							gameChanged = true;
+						}
+
+						var trimmedLocation = scoreUpdate.NewLocation?.Trim() ?? string.Empty;
+						if (scoreUpdate.NewLocation != null && game.Location != trimmedLocation)
+						{
+							game.Location = trimmedLocation;
+							gameChanged = true;
+						}
+					}
 				}
 
 				if (scoreUpdate.Status == GameStatus.Rescheduled)
@@ -276,7 +342,7 @@ public class ScoresController : Controller
 					{
 						var divisionGames = (await _gameService.GetGamesByDivisionAsync(divisionId))?.ToList() ?? new List<Game>();
 						var roundByDate = divisionGames
-							.Where(g => !g.RescheduledFromGameId.HasValue)
+							.Where(g => !g.RescheduledFromGameId.HasValue && g.Status != GameStatus.Unscheduled && g.ScheduledDateTime != default)
 							.GroupBy(g => g.ScheduledDateTime.Date.ToString("yyyy-MM-dd"))
 							.ToDictionary(grp => grp.Key, grp => grp.First().Round, StringComparer.Ordinal);
 						targetRound = GameRoundCalculator.GetRoundForDate(newUtcDateTime, roundByDate) ?? game.Round;
@@ -337,14 +403,39 @@ public class ScoresController : Controller
 						scoreUpdate.GameId, scoreUpdate.HomeTeamId, scoreUpdate.AwayTeamId);
 				}
 
-				// Both scores present: save them. Both blank: clear a score entered by mistake.
 				var scoreCleared = false;
 				if (hasHomeScore && hasAwayScore)
 				{
-					await _scoreService.EnterOrUpdateScoreAsync(
-						scoreUpdate.GameId,
-						scoreUpdate.HomeScore!.Value,
-						scoreUpdate.AwayScore!.Value);
+					if (game is PoolPlayGame)
+					{
+						await _scoreService.EnterOrUpdatePoolPlayScoreAsync(
+							scoreUpdate.GameId,
+							scoreUpdate.HomeScore!.Value,
+							scoreUpdate.AwayScore!.Value,
+							scoreUpdate.IsForfeit,
+							scoreUpdate.HomeRedCards,
+							scoreUpdate.AwayRedCards,
+							scoreUpdate.HomeYellowCards,
+							scoreUpdate.AwayYellowCards);
+					}
+					else if (game is EliminationGame)
+					{
+						await _scoreService.EnterOrUpdateEliminationScoreAsync(
+							scoreUpdate.GameId,
+							scoreUpdate.HomeScore!.Value,
+							scoreUpdate.AwayScore!.Value,
+							scoreUpdate.IsForfeit,
+							scoreUpdate.IsDecidedByPenalties,
+							scoreUpdate.HomePenaltyScore,
+							scoreUpdate.AwayPenaltyScore);
+					}
+					else
+					{
+						await _scoreService.EnterOrUpdateScoreAsync(
+							scoreUpdate.GameId,
+							scoreUpdate.HomeScore!.Value,
+							scoreUpdate.AwayScore!.Value);
+					}
 
 					_logger.LogInformation("Score saved for game {GameId}: {HomeScore}-{AwayScore}",
 						scoreUpdate.GameId, scoreUpdate.HomeScore, scoreUpdate.AwayScore);
@@ -371,6 +462,33 @@ public class ScoresController : Controller
 			}
 		}
 
+		if (poolPlayTiebreakerWinnerTeamId.HasValue)
+		{
+			var division = await _divisionRepository.GetByIdAsync(divisionId);
+			if (division != null)
+			{
+				var newTiebreakerId = poolPlayTiebreakerWinnerTeamId.Value > 0 ? poolPlayTiebreakerWinnerTeamId.Value : (int?)null;
+				if (division.PoolPlayTiebreakerWinnerTeamId != newTiebreakerId)
+				{
+					division.PoolPlayTiebreakerWinnerTeamId = newTiebreakerId;
+					_divisionRepository.Update(division);
+					await _divisionRepository.SaveChangesAsync();
+					hasTournamentGames = true;
+					successCount++;
+				}
+			}
+		}
+
+		if (hasTournamentGames && _tournamentService != null)
+		{
+			await _tournamentService.SyncTournamentProgressionAsync(divisionId);
+			if (_standingsRefreshService != null)
+			{
+				await _standingsRefreshService.RefreshDivisionStandingsAsync(divisionId);
+				await _divisionRepository.SaveChangesAsync();
+			}
+		}
+
 		if (successCount > 0)
 		{
 			TempData["SuccessMessage"] = $"{successCount} game(s) saved successfully.";
@@ -379,6 +497,39 @@ public class ScoresController : Controller
 		if (errorCount > 0)
 		{
 			TempData["ErrorMessage"] = $"{errorCount} game(s) failed to save. Errors: {string.Join("; ", errors)}";
+		}
+
+		return RedirectToAction(nameof(Entry), new { divisionId, round });
+	}
+
+	// POST: Scores/RegenerateTournament
+	[HttpPost]
+	[ValidateAntiForgeryToken]
+	public async Task<IActionResult> RegenerateTournament(int divisionId, int round, bool forceReset = false)
+	{
+		if (_tournamentService == null)
+		{
+			TempData["ErrorMessage"] = "Tournament service is not available.";
+			return RedirectToAction(nameof(Entry), new { divisionId, round });
+		}
+
+		try
+		{
+			await _tournamentService.GenerateOrResetTournamentGamesAsync(divisionId, forceReset);
+			if (_standingsRefreshService != null)
+			{
+				await _standingsRefreshService.RefreshDivisionStandingsAsync(divisionId);
+				await _divisionRepository.SaveChangesAsync();
+			}
+
+			TempData["SuccessMessage"] = forceReset
+				? "Tournament games regenerated and reset from Round 9 standings."
+				: "Tournament games generated/updated from Round 9 standings.";
+		}
+		catch (Exception ex)
+		{
+			TempData["ErrorMessage"] = $"Error generating tournament games: {ex.Message}";
+			_logger.LogError(ex, "Error generating tournament games for division {DivisionId}", divisionId);
 		}
 
 		return RedirectToAction(nameof(Entry), new { divisionId, round });
@@ -394,6 +545,11 @@ public class ScoresController : Controller
 			var deleted = await _scoreService.DeleteScoreAsync(gameId);
 			if (deleted)
 			{
+				if (_tournamentService != null)
+				{
+					await _tournamentService.SyncTournamentProgressionAsync(divisionId);
+				}
+
 				TempData["SuccessMessage"] = "Score deleted successfully.";
 				_logger.LogInformation("Score deleted for game {GameId}", gameId);
 			}
@@ -409,5 +565,111 @@ public class ScoresController : Controller
 		}
 
 		return RedirectToAction(nameof(Entry), new { divisionId, round });
+	}
+
+	private static ScoreEntryDto BuildScoreEntryDto(Game game, Score? score, Game? makeupGame)
+	{
+		var scheduledPacific = TimezoneHelper.ToPacificTime(game.ScheduledDateTime);
+		var rescheduledPacific = makeupGame != null ? TimezoneHelper.ToPacificTime(makeupGame.ScheduledDateTime) : (DateTime?)null;
+
+		if (game is EliminationGame elimGame)
+		{
+			var elimScore = score as EliminationScore;
+			var tourneyScore = score as TournamentScore;
+			return new EliminationScoreEntryDto
+			{
+				GameId = game.Id,
+				Stage = elimGame.Stage,
+				StageLabel = GetStageLabel(elimGame),
+				HomeTeamPlaceholder = elimGame.HomeTeamPlaceholder,
+				AwayTeamPlaceholder = elimGame.AwayTeamPlaceholder,
+				HomeTeamId = game.HomeTeamId,
+				HomeTeamName = game.HomeTeam?.Name ?? elimGame.HomeTeamPlaceholder ?? "TBD",
+				AwayTeamId = game.AwayTeamId,
+				AwayTeamName = game.AwayTeam?.Name ?? elimGame.AwayTeamPlaceholder ?? "TBD",
+				ScheduledDateTime = scheduledPacific,
+				Location = game.Location,
+				Round = game.Round,
+				Status = game.Status,
+				HomeScore = score?.HomeScore,
+				AwayScore = score?.AwayScore,
+				IsForfeit = tourneyScore?.IsForfeit ?? false,
+				IsDecidedByPenalties = elimScore?.IsDecidedByPenalties ?? false,
+				HomePenaltyScore = elimScore?.HomePenaltyScore,
+				AwayPenaltyScore = elimScore?.AwayPenaltyScore,
+				LastModified = score?.ModifiedAt,
+				LastModifiedBy = score?.ModifiedBy,
+				RescheduledDateTime = rescheduledPacific,
+				RescheduledLocation = makeupGame?.Location,
+				RescheduledRound = makeupGame?.Round
+			};
+		}
+
+		if (game is PoolPlayGame poolGame)
+		{
+			var poolScore = score as PoolPlayScore;
+			var tourneyScore = score as TournamentScore;
+			return new PoolPlayScoreEntryDto
+			{
+				GameId = game.Id,
+				Stage = poolGame.Stage,
+				StageLabel = GetStageLabel(poolGame),
+				HomeTeamPlaceholder = poolGame.HomeTeamPlaceholder,
+				AwayTeamPlaceholder = poolGame.AwayTeamPlaceholder,
+				HomeTeamId = game.HomeTeamId,
+				HomeTeamName = game.HomeTeam?.Name ?? poolGame.HomeTeamPlaceholder ?? "TBD",
+				AwayTeamId = game.AwayTeamId,
+				AwayTeamName = game.AwayTeam?.Name ?? poolGame.AwayTeamPlaceholder ?? "TBD",
+				ScheduledDateTime = scheduledPacific,
+				Location = game.Location,
+				Round = game.Round,
+				Status = game.Status,
+				HomeScore = score?.HomeScore,
+				AwayScore = score?.AwayScore,
+				IsForfeit = tourneyScore?.IsForfeit ?? false,
+				HomeRedCards = poolScore?.HomeRedCards ?? 0,
+				AwayRedCards = poolScore?.AwayRedCards ?? 0,
+				HomeYellowCards = poolScore?.HomeYellowCards ?? 0,
+				AwayYellowCards = poolScore?.AwayYellowCards ?? 0,
+				LastModified = score?.ModifiedAt,
+				LastModifiedBy = score?.ModifiedBy,
+				RescheduledDateTime = rescheduledPacific,
+				RescheduledLocation = makeupGame?.Location,
+				RescheduledRound = makeupGame?.Round
+			};
+		}
+
+		return new ScoreEntryDto
+		{
+			GameId = game.Id,
+			HomeTeamId = game.HomeTeamId,
+			HomeTeamName = game.HomeTeam?.Name ?? "Unknown",
+			AwayTeamId = game.AwayTeamId,
+			AwayTeamName = game.AwayTeam?.Name ?? "Unknown",
+			ScheduledDateTime = scheduledPacific,
+			Location = game.Location,
+			Round = game.Round,
+			Status = game.Status,
+			HomeScore = score?.HomeScore,
+			AwayScore = score?.AwayScore,
+			LastModified = score?.ModifiedAt,
+			LastModifiedBy = score?.ModifiedBy,
+			RescheduledDateTime = rescheduledPacific,
+			RescheduledLocation = makeupGame?.Location,
+			RescheduledRound = makeupGame?.Round
+		};
+	}
+
+	private static string GetStageLabel(TournamentGame game)
+	{
+		return game.Stage switch
+		{
+			TournamentStage.Quarterfinal1 => "Quarterfinal 1 (4th vs 5th)",
+			TournamentStage.Quarterfinal2 => "Quarterfinal 2 (3rd vs 6th)",
+			TournamentStage.Semifinal1 => "Semifinal 1 (1st vs QF1 Winner)",
+			TournamentStage.Semifinal2 => "Semifinal 2 (2nd vs QF2 Winner)",
+			TournamentStage.Final => "Final",
+			_ => game.Stage.GetDisplayLabel()
+		};
 	}
 }
