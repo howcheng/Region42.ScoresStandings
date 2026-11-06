@@ -32,10 +32,20 @@ public class GameService : IGameService
 		_logger = logger;
 	}
 
+	public IEnumerable<Game> GetGamesByDivision(int divisionId)
+	{
+		return GetGamesByDivisionAsync(divisionId).GetAwaiter().GetResult();
+	}
+
 	public async Task<IEnumerable<Game>> GetGamesByDivisionAsync(int divisionId)
 	{
 		_logger.LogInformation("Getting games for division {DivisionId}", divisionId);
 		return await _gameRepository.FindAsync(g => g.DivisionId == divisionId);
+	}
+
+	public IEnumerable<Game> GetGamesByDivisionAndRound(int divisionId, int round)
+	{
+		return GetGamesByDivisionAndRoundAsync(divisionId, round).GetAwaiter().GetResult();
 	}
 
 	public async Task<IEnumerable<Game>> GetGamesByDivisionAndRoundAsync(int divisionId, int round)
@@ -44,10 +54,20 @@ public class GameService : IGameService
 		return await _gameRepository.FindAsync(g => g.DivisionId == divisionId && g.Round == round);
 	}
 
+	public Game? GetGameById(int gameId)
+	{
+		return GetGameByIdAsync(gameId).GetAwaiter().GetResult();
+	}
+
 	public async Task<Game?> GetGameByIdAsync(int gameId)
 	{
 		_logger.LogDebug("Getting game {GameId}", gameId);
 		return await _gameRepository.GetByIdAsync(gameId);
+	}
+
+	public IEnumerable<Game> GetGamesByTeam(int teamId)
+	{
+		return GetGamesByTeamAsync(teamId).GetAwaiter().GetResult();
 	}
 
 	public async Task<IEnumerable<Game>> GetGamesByTeamAsync(int teamId)
@@ -56,9 +76,31 @@ public class GameService : IGameService
 		return await _gameRepository.FindAsync(g => g.HomeTeamId == teamId || g.AwayTeamId == teamId);
 	}
 
-	public async Task<Game> CreateGameAsync(Game game)
+	public Game CreateGame(Game game)
 	{
-		_logger.LogInformation("Creating game between teams {HomeTeamId} and {AwayTeamId}", 
+		return CreateGame(game, saveChanges: true);
+	}
+
+	public Game CreateGame(Game game, bool saveChanges)
+	{
+		ArgumentNullException.ThrowIfNull(game);
+		return CreateGameInternalAsync(game, saveChanges).GetAwaiter().GetResult();
+	}
+
+	public Task<Game> CreateGameAsync(Game game)
+	{
+		return CreateGameAsync(game, saveChanges: true);
+	}
+
+	public Task<Game> CreateGameAsync(Game game, bool saveChanges)
+	{
+		ArgumentNullException.ThrowIfNull(game);
+		return CreateGameInternalAsync(game, saveChanges);
+	}
+
+	private async Task<Game> CreateGameInternalAsync(Game game, bool saveChanges)
+	{
+		_logger.LogInformation("Creating game between teams {HomeTeamId} and {AwayTeamId}",
 			game.HomeTeamId, game.AwayTeamId);
 
 		// Validate division exists
@@ -159,13 +201,38 @@ public class GameService : IGameService
 		}
 
 		await _gameRepository.AddAsync(game);
-		await _gameRepository.SaveChangesAsync();
+		if (saveChanges)
+		{
+			await _gameRepository.SaveChangesAsync();
+		}
 
 		_logger.LogInformation("Game {GameId} created successfully", game.Id);
 		return game;
 	}
 
-	public async Task<Game> UpdateGameAsync(Game game)
+	public Game UpdateGame(Game game)
+	{
+		return UpdateGame(game, saveChanges: true);
+	}
+
+	public Game UpdateGame(Game game, bool saveChanges)
+	{
+		ArgumentNullException.ThrowIfNull(game);
+		return UpdateGameInternalAsync(game, saveChanges).GetAwaiter().GetResult();
+	}
+
+	public Task<Game> UpdateGameAsync(Game game)
+	{
+		return UpdateGameAsync(game, saveChanges: true);
+	}
+
+	public Task<Game> UpdateGameAsync(Game game, bool saveChanges)
+	{
+		ArgumentNullException.ThrowIfNull(game);
+		return UpdateGameInternalAsync(game, saveChanges);
+	}
+
+	private async Task<Game> UpdateGameInternalAsync(Game game, bool saveChanges)
 	{
 		_logger.LogInformation("Updating game {GameId}", game.Id);
 
@@ -262,13 +329,31 @@ public class GameService : IGameService
 		}
 
 		_gameRepository.Update(game);
-		await _gameRepository.SaveChangesAsync();
+		if (saveChanges)
+		{
+			await _gameRepository.SaveChangesAsync();
+		}
 
 		_logger.LogInformation("Game {GameId} updated successfully", game.Id);
 		return game;
 	}
 
-	public async Task UpdateGameStatusAsync(int gameId, GameStatus status)
+	public void UpdateGameStatus(int gameId, GameStatus status)
+	{
+		UpdateGameStatus(gameId, status, saveChanges: true);
+	}
+
+	public void UpdateGameStatus(int gameId, GameStatus status, bool saveChanges)
+	{
+		UpdateGameStatusAsync(gameId, status, saveChanges).GetAwaiter().GetResult();
+	}
+
+	public Task UpdateGameStatusAsync(int gameId, GameStatus status)
+	{
+		return UpdateGameStatusAsync(gameId, status, saveChanges: true);
+	}
+
+	public async Task UpdateGameStatusAsync(int gameId, GameStatus status, bool saveChanges)
 	{
 		_logger.LogInformation("Updating status of game {GameId} to {Status}", gameId, status);
 
@@ -281,12 +366,30 @@ public class GameService : IGameService
 
 		game.Status = status;
 		_gameRepository.Update(game);
-		await _gameRepository.SaveChangesAsync();
+		if (saveChanges)
+		{
+			await _gameRepository.SaveChangesAsync();
+		}
 
 		_logger.LogInformation("Game {GameId} status updated to {Status} successfully", gameId, status);
 	}
 
-	public async Task<bool> DeleteGameAsync(int gameId)
+	public bool DeleteGame(int gameId)
+	{
+		return DeleteGame(gameId, saveChanges: true);
+	}
+
+	public bool DeleteGame(int gameId, bool saveChanges)
+	{
+		return DeleteGameAsync(gameId, saveChanges).GetAwaiter().GetResult();
+	}
+
+	public Task<bool> DeleteGameAsync(int gameId)
+	{
+		return DeleteGameAsync(gameId, saveChanges: true);
+	}
+
+	public async Task<bool> DeleteGameAsync(int gameId, bool saveChanges)
 	{
 		_logger.LogInformation("Attempting to delete game {GameId}", gameId);
 
@@ -306,10 +409,18 @@ public class GameService : IGameService
 		}
 
 		_gameRepository.Delete(game);
-		await _gameRepository.SaveChangesAsync();
+		if (saveChanges)
+		{
+			await _gameRepository.SaveChangesAsync();
+		}
 
 		_logger.LogInformation("Game {GameId} deleted successfully", gameId);
 		return true;
+	}
+
+	public bool ValidateNoScheduleConflict(int teamId, DateTime scheduledDateTime, int? excludeGameId = null)
+	{
+		return ValidateNoScheduleConflictAsync(teamId, scheduledDateTime, excludeGameId).GetAwaiter().GetResult();
 	}
 
 	public async Task<bool> ValidateNoScheduleConflictAsync(int teamId, DateTime scheduledDateTime, int? excludeGameId = null)

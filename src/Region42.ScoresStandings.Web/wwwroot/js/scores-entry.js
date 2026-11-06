@@ -190,12 +190,50 @@
 		const isUnscheduled = selectedStatus === 'Unscheduled';
 		const isSchedulingUnscheduled = selectedStatus === 'Scheduled' && wasUnscheduled;
 
-		rescheduleFields.classList.toggle('d-none', !(isRescheduled || isUnscheduled || isSchedulingUnscheduled));
+		if (isRescheduled || isUnscheduled || isSchedulingUnscheduled) {
+			rescheduleFields.classList.remove('d-none');
+			const toggleButton = document.getElementById(`toggleScheduleBtn_${index}`);
+			if (toggleButton) {
+				toggleButton.setAttribute('aria-expanded', 'true');
+			}
+		}
+
+		const newDateTimeInput = document.getElementById(`newDateTime_${index}`);
+		const newLocationInput = document.getElementById(`newLocation_${index}`);
+		if (isRescheduled) {
+			if (newDateTimeInput && select.dataset.rescheduledDatetime) {
+				newDateTimeInput.value = select.dataset.rescheduledDatetime;
+			}
+			if (newLocationInput && select.dataset.rescheduledLocation !== undefined) {
+				newLocationInput.value = select.dataset.rescheduledLocation;
+			}
+		} else if (select.dataset.wasRescheduled === 'true') {
+			if (newDateTimeInput && select.dataset.originalDatetime !== undefined) {
+				newDateTimeInput.value = select.dataset.originalDatetime;
+			}
+			if (newLocationInput && select.dataset.originalLocation !== undefined) {
+				newLocationInput.value = select.dataset.originalLocation;
+			}
+		}
 
 		const newRoundContainer = document.getElementById(`newRoundContainer_${index}`);
 		if (newRoundContainer) {
 			newRoundContainer.classList.toggle('d-none', !isRescheduled);
 		}
+	}
+
+	/**
+	 * Toggle visibility of date/time and location fields when the edit button is clicked
+	 */
+	function toggleScheduleEditFields(button) {
+		const index = button.dataset.index;
+		const rescheduleFields = document.getElementById(`rescheduleFields_${index}`);
+		if (!rescheduleFields) {
+			return;
+		}
+
+		const isHidden = rescheduleFields.classList.toggle('d-none');
+		button.setAttribute('aria-expanded', isHidden ? 'false' : 'true');
 	}
 
 	/**
@@ -296,6 +334,10 @@
 
 		document.querySelectorAll('.game-status-select').forEach(select => {
 			select.addEventListener('change', () => toggleRescheduleFields(select));
+		});
+
+		document.querySelectorAll('.schedule-edit-toggle').forEach(button => {
+			button.addEventListener('click', () => toggleScheduleEditFields(button));
 		});
 
 		document.querySelectorAll('.forfeit-toggle').forEach(checkbox => {

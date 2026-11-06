@@ -29,6 +29,11 @@ public class ScoreService : IScoreService
 		_logger = logger;
 	}
 
+	public Score? GetScoreByGameId(int gameId)
+	{
+		return GetScoreByGameIdAsync(gameId).GetAwaiter().GetResult();
+	}
+
 	public async Task<Score?> GetScoreByGameIdAsync(int gameId)
 	{
 		_logger.LogInformation("Getting score for game {GameId}", gameId);
@@ -36,7 +41,44 @@ public class ScoreService : IScoreService
 		return scores.FirstOrDefault();
 	}
 
-	public async Task<Score> EnterOrUpdateScoreAsync(int gameId, int homeScore, int awayScore)
+	public Score EnterOrUpdateScore(int gameId, int homeScore, int awayScore)
+	{
+		return EnterOrUpdateScore(gameId, homeScore, awayScore, saveChanges: true);
+	}
+
+	public Score EnterOrUpdateScore(int gameId, int homeScore, int awayScore, bool saveChanges)
+	{
+		ValidateNonNegativeScores(gameId, homeScore, awayScore);
+		return EnterOrUpdateScoreInternalAsync(gameId, homeScore, awayScore, saveChanges).GetAwaiter().GetResult();
+	}
+
+	public Task<Score> EnterOrUpdateScoreAsync(int gameId, int homeScore, int awayScore)
+	{
+		return EnterOrUpdateScoreAsync(gameId, homeScore, awayScore, saveChanges: true);
+	}
+
+	public Task<Score> EnterOrUpdateScoreAsync(int gameId, int homeScore, int awayScore, bool saveChanges)
+	{
+		ValidateNonNegativeScores(gameId, homeScore, awayScore);
+		return EnterOrUpdateScoreInternalAsync(gameId, homeScore, awayScore, saveChanges);
+	}
+
+	private void ValidateNonNegativeScores(int gameId, int homeScore, int awayScore)
+	{
+		if (homeScore < 0)
+		{
+			_logger.LogWarning("Invalid home score {HomeScore} for game {GameId}", homeScore, gameId);
+			throw new ArgumentException("Home score cannot be negative", nameof(homeScore));
+		}
+
+		if (awayScore < 0)
+		{
+			_logger.LogWarning("Invalid away score {AwayScore} for game {GameId}", awayScore, gameId);
+			throw new ArgumentException("Away score cannot be negative", nameof(awayScore));
+		}
+	}
+
+	private async Task<Score> EnterOrUpdateScoreInternalAsync(int gameId, int homeScore, int awayScore, bool saveChanges)
 	{
 		_logger.LogInformation("Entering/updating score for game {GameId}: Home={HomeScore}, Away={AwayScore}",
 			gameId, homeScore, awayScore);
@@ -47,8 +89,6 @@ public class ScoreService : IScoreService
 			_logger.LogWarning("Game {GameId} not found", gameId);
 			throw new ArgumentException($"Game with ID {gameId} not found", nameof(gameId));
 		}
-
-		ValidateNonNegativeScores(gameId, homeScore, awayScore);
 
 		var scores = await _scoreRepository.FindAsync(s => s.GameId == gameId);
 		var existingScore = scores.FirstOrDefault();
@@ -85,10 +125,20 @@ public class ScoreService : IScoreService
 
 		existingScore.Game = game;
 		game.Score = existingScore;
-		await RefreshStandingsAndSaveAsync(game.DivisionId);
-		_logger.LogInformation("Game {GameId} score saved and standings refreshed", gameId);
+
+		if (saveChanges)
+		{
+			await RefreshStandingsAndSaveAsync(game.DivisionId);
+			_logger.LogInformation("Game {GameId} score saved and standings refreshed", gameId);
+		}
 
 		return existingScore;
+	}
+
+	private async Task RefreshStandingsAndSaveAsync(int divisionId)
+	{
+		await _standingsRefreshService.RefreshDivisionStandingsAsync(divisionId);
+		await _scoreRepository.SaveChangesAsync();
 	}
 
 	public PoolPlayScore EnterOrUpdatePoolPlayScore(
@@ -101,6 +151,29 @@ public class ScoreService : IScoreService
 		int homeYellowCards = 0,
 		int awayYellowCards = 0)
 	{
+		return EnterOrUpdatePoolPlayScore(
+			gameId,
+			homeScore,
+			awayScore,
+			isForfeit,
+			homeRedCards,
+			awayRedCards,
+			homeYellowCards,
+			awayYellowCards,
+			saveChanges: true);
+	}
+
+	public PoolPlayScore EnterOrUpdatePoolPlayScore(
+		int gameId,
+		int homeScore,
+		int awayScore,
+		bool isForfeit,
+		int homeRedCards,
+		int awayRedCards,
+		int homeYellowCards,
+		int awayYellowCards,
+		bool saveChanges)
+	{
 		ValidatePoolPlayScoreInputs(gameId, homeScore, awayScore, isForfeit, homeRedCards, awayRedCards, homeYellowCards, awayYellowCards);
 		return EnterOrUpdatePoolPlayScoreInternalAsync(
 			gameId,
@@ -110,7 +183,8 @@ public class ScoreService : IScoreService
 			homeRedCards,
 			awayRedCards,
 			homeYellowCards,
-			awayYellowCards).GetAwaiter().GetResult();
+			awayYellowCards,
+			saveChanges).GetAwaiter().GetResult();
 	}
 
 	public Task<PoolPlayScore> EnterOrUpdatePoolPlayScoreAsync(
@@ -123,6 +197,29 @@ public class ScoreService : IScoreService
 		int homeYellowCards = 0,
 		int awayYellowCards = 0)
 	{
+		return EnterOrUpdatePoolPlayScoreAsync(
+			gameId,
+			homeScore,
+			awayScore,
+			isForfeit,
+			homeRedCards,
+			awayRedCards,
+			homeYellowCards,
+			awayYellowCards,
+			saveChanges: true);
+	}
+
+	public Task<PoolPlayScore> EnterOrUpdatePoolPlayScoreAsync(
+		int gameId,
+		int homeScore,
+		int awayScore,
+		bool isForfeit,
+		int homeRedCards,
+		int awayRedCards,
+		int homeYellowCards,
+		int awayYellowCards,
+		bool saveChanges)
+	{
 		ValidatePoolPlayScoreInputs(gameId, homeScore, awayScore, isForfeit, homeRedCards, awayRedCards, homeYellowCards, awayYellowCards);
 		return EnterOrUpdatePoolPlayScoreInternalAsync(
 			gameId,
@@ -132,7 +229,8 @@ public class ScoreService : IScoreService
 			homeRedCards,
 			awayRedCards,
 			homeYellowCards,
-			awayYellowCards);
+			awayYellowCards,
+			saveChanges);
 	}
 
 	private void ValidatePoolPlayScoreInputs(
@@ -166,7 +264,8 @@ public class ScoreService : IScoreService
 		int homeRedCards,
 		int awayRedCards,
 		int homeYellowCards,
-		int awayYellowCards)
+		int awayYellowCards,
+		bool saveChanges)
 	{
 		var game = await _gameRepository.GetByIdAsync(gameId)
 			?? throw new ArgumentException($"Game with ID {gameId} not found", nameof(gameId));
@@ -221,7 +320,11 @@ public class ScoreService : IScoreService
 
 		poolScore.Game = game;
 		game.Score = poolScore;
-		await RefreshStandingsAndSaveAsync(game.DivisionId);
+
+		if (saveChanges)
+		{
+			await RefreshStandingsAndSaveAsync(game.DivisionId);
+		}
 
 		return poolScore;
 	}
@@ -235,6 +338,27 @@ public class ScoreService : IScoreService
 		int? homePenaltyScore = null,
 		int? awayPenaltyScore = null)
 	{
+		return EnterOrUpdateEliminationScore(
+			gameId,
+			homeScore,
+			awayScore,
+			isForfeit,
+			isDecidedByPenalties,
+			homePenaltyScore,
+			awayPenaltyScore,
+			saveChanges: true);
+	}
+
+	public EliminationScore EnterOrUpdateEliminationScore(
+		int gameId,
+		int homeScore,
+		int awayScore,
+		bool isForfeit,
+		bool isDecidedByPenalties,
+		int? homePenaltyScore,
+		int? awayPenaltyScore,
+		bool saveChanges)
+	{
 		ValidateEliminationScoreInputs(gameId, homeScore, awayScore, isForfeit, isDecidedByPenalties, homePenaltyScore, awayPenaltyScore);
 		return EnterOrUpdateEliminationScoreInternalAsync(
 			gameId,
@@ -243,7 +367,8 @@ public class ScoreService : IScoreService
 			isForfeit,
 			isDecidedByPenalties,
 			homePenaltyScore,
-			awayPenaltyScore).GetAwaiter().GetResult();
+			awayPenaltyScore,
+			saveChanges).GetAwaiter().GetResult();
 	}
 
 	public Task<EliminationScore> EnterOrUpdateEliminationScoreAsync(
@@ -255,6 +380,27 @@ public class ScoreService : IScoreService
 		int? homePenaltyScore = null,
 		int? awayPenaltyScore = null)
 	{
+		return EnterOrUpdateEliminationScoreAsync(
+			gameId,
+			homeScore,
+			awayScore,
+			isForfeit,
+			isDecidedByPenalties,
+			homePenaltyScore,
+			awayPenaltyScore,
+			saveChanges: true);
+	}
+
+	public Task<EliminationScore> EnterOrUpdateEliminationScoreAsync(
+		int gameId,
+		int homeScore,
+		int awayScore,
+		bool isForfeit,
+		bool isDecidedByPenalties,
+		int? homePenaltyScore,
+		int? awayPenaltyScore,
+		bool saveChanges)
+	{
 		ValidateEliminationScoreInputs(gameId, homeScore, awayScore, isForfeit, isDecidedByPenalties, homePenaltyScore, awayPenaltyScore);
 		return EnterOrUpdateEliminationScoreInternalAsync(
 			gameId,
@@ -263,7 +409,8 @@ public class ScoreService : IScoreService
 			isForfeit,
 			isDecidedByPenalties,
 			homePenaltyScore,
-			awayPenaltyScore);
+			awayPenaltyScore,
+			saveChanges);
 	}
 
 	private void ValidateEliminationScoreInputs(
@@ -322,7 +469,8 @@ public class ScoreService : IScoreService
 		bool isForfeit,
 		bool isDecidedByPenalties,
 		int? homePenaltyScore,
-		int? awayPenaltyScore)
+		int? awayPenaltyScore,
+		bool saveChanges)
 	{
 		var game = await _gameRepository.GetByIdAsync(gameId)
 			?? throw new ArgumentException($"Game with ID {gameId} not found", nameof(gameId));
@@ -377,30 +525,18 @@ public class ScoreService : IScoreService
 
 		elimScore.Game = game;
 		game.Score = elimScore;
-		await RefreshStandingsAndSaveAsync(game.DivisionId);
+
+		if (saveChanges)
+		{
+			await RefreshStandingsAndSaveAsync(game.DivisionId);
+		}
 
 		return elimScore;
 	}
 
-	private void ValidateNonNegativeScores(int gameId, int homeScore, int awayScore)
+	public IEnumerable<Score> GetScoresByDivision(int divisionId)
 	{
-		if (homeScore < 0)
-		{
-			_logger.LogWarning("Invalid home score {HomeScore} for game {GameId}", homeScore, gameId);
-			throw new ArgumentException("Home score cannot be negative", nameof(homeScore));
-		}
-
-		if (awayScore < 0)
-		{
-			_logger.LogWarning("Invalid away score {AwayScore} for game {GameId}", awayScore, gameId);
-			throw new ArgumentException("Away score cannot be negative", nameof(awayScore));
-		}
-	}
-
-	private async Task RefreshStandingsAndSaveAsync(int divisionId)
-	{
-		await _standingsRefreshService.RefreshDivisionStandingsAsync(divisionId);
-		await _scoreRepository.SaveChangesAsync();
+		return GetScoresByDivisionAsync(divisionId).GetAwaiter().GetResult();
 	}
 
 	public async Task<IEnumerable<Score>> GetScoresByDivisionAsync(int divisionId)
@@ -413,6 +549,11 @@ public class ScoreService : IScoreService
 		return scores;
 	}
 
+	public IEnumerable<Score> GetScoresByDivisionAndRound(int divisionId, int throughRound)
+	{
+		return GetScoresByDivisionAndRoundAsync(divisionId, throughRound).GetAwaiter().GetResult();
+	}
+
 	public async Task<IEnumerable<Score>> GetScoresByDivisionAndRoundAsync(int divisionId, int throughRound)
 	{
 		_logger.LogInformation("Getting scores for division {DivisionId} through round {Round}",
@@ -423,6 +564,11 @@ public class ScoreService : IScoreService
 			score.Game.Round <= throughRound);
 
 		return scores;
+	}
+
+	public bool CanEnterScore(int gameId)
+	{
+		return CanEnterScoreAsync(gameId).GetAwaiter().GetResult();
 	}
 
 	public async Task<bool> CanEnterScoreAsync(int gameId)
@@ -447,7 +593,22 @@ public class ScoreService : IScoreService
 		return canEnter;
 	}
 
-	public async Task<bool> DeleteScoreAsync(int gameId)
+	public bool DeleteScore(int gameId)
+	{
+		return DeleteScore(gameId, saveChanges: true);
+	}
+
+	public bool DeleteScore(int gameId, bool saveChanges)
+	{
+		return DeleteScoreAsync(gameId, saveChanges).GetAwaiter().GetResult();
+	}
+
+	public Task<bool> DeleteScoreAsync(int gameId)
+	{
+		return DeleteScoreAsync(gameId, saveChanges: true);
+	}
+
+	public async Task<bool> DeleteScoreAsync(int gameId, bool saveChanges)
 	{
 		_logger.LogInformation("Deleting score for game {GameId}", gameId);
 
@@ -470,13 +631,16 @@ public class ScoreService : IScoreService
 			_gameRepository.Update(game);
 		}
 
-		if (game != null)
+		if (saveChanges)
 		{
-			await RefreshStandingsAndSaveAsync(game.DivisionId);
-		}
-		else
-		{
-			await _scoreRepository.SaveChangesAsync();
+			if (game != null)
+			{
+				await RefreshStandingsAndSaveAsync(game.DivisionId);
+			}
+			else
+			{
+				await _scoreRepository.SaveChangesAsync();
+			}
 		}
 
 		_logger.LogInformation("Successfully deleted score for game {GameId}", gameId);

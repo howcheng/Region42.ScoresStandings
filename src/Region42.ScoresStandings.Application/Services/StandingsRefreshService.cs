@@ -16,6 +16,11 @@ public class StandingsRefreshService : IStandingsRefreshService
 		_tournamentService = tournamentService;
 	}
 
+	public void RefreshDivisionStandings(int divisionId)
+	{
+		RefreshDivisionStandingsAsync(divisionId).GetAwaiter().GetResult();
+	}
+
 	public async Task RefreshDivisionStandingsAsync(int divisionId)
 	{
 		await _context.LoadAllAsync();
@@ -27,7 +32,7 @@ public class StandingsRefreshService : IStandingsRefreshService
 		{
 			try
 			{
-				await _tournamentService.EnsureTournamentGamesAsync(divisionId);
+				await _tournamentService.EnsureTournamentGamesAsync(divisionId, saveChanges: false);
 			}
 			catch (NotSupportedException)
 			{

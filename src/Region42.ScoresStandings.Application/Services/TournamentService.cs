@@ -30,36 +30,39 @@ public class TournamentService : ITournamentService
 
 	public bool EnsureTournamentGames(int divisionId)
 	{
+		return EnsureTournamentGames(divisionId, saveChanges: true);
+	}
+
+	public bool EnsureTournamentGames(int divisionId, bool saveChanges)
+	{
 		if (divisionId <= 0)
 		{
 			throw new ArgumentOutOfRangeException(nameof(divisionId), "Division ID must be greater than zero.");
 		}
 
-		_context.LoadAllAsync().GetAwaiter().GetResult();
-		var createdOrUpdated = EnsureTournamentGamesCore(divisionId, requirePriorRoundsCompleted: true, forceReset: false);
-		if (createdOrUpdated)
-		{
-			_context.SaveChangesAsync().GetAwaiter().GetResult();
-		}
-
-		return createdOrUpdated;
+		return EnsureTournamentGamesInternalAsync(divisionId, saveChanges).GetAwaiter().GetResult();
 	}
 
 	public Task<bool> EnsureTournamentGamesAsync(int divisionId)
 	{
+		return EnsureTournamentGamesAsync(divisionId, saveChanges: true);
+	}
+
+	public Task<bool> EnsureTournamentGamesAsync(int divisionId, bool saveChanges)
+	{
 		if (divisionId <= 0)
 		{
 			throw new ArgumentOutOfRangeException(nameof(divisionId), "Division ID must be greater than zero.");
 		}
 
-		return EnsureTournamentGamesInternalAsync(divisionId);
+		return EnsureTournamentGamesInternalAsync(divisionId, saveChanges);
 	}
 
-	private async Task<bool> EnsureTournamentGamesInternalAsync(int divisionId)
+	private async Task<bool> EnsureTournamentGamesInternalAsync(int divisionId, bool saveChanges)
 	{
 		await _context.LoadAllAsync();
 		var createdOrUpdated = EnsureTournamentGamesCore(divisionId, requirePriorRoundsCompleted: true, forceReset: false);
-		if (createdOrUpdated)
+		if (createdOrUpdated && saveChanges)
 		{
 			await _context.SaveChangesAsync();
 		}
@@ -69,36 +72,39 @@ public class TournamentService : ITournamentService
 
 	public bool GenerateOrResetTournamentGames(int divisionId, bool forceReset = false)
 	{
+		return GenerateOrResetTournamentGames(divisionId, forceReset, saveChanges: true);
+	}
+
+	public bool GenerateOrResetTournamentGames(int divisionId, bool forceReset, bool saveChanges)
+	{
 		if (divisionId <= 0)
 		{
 			throw new ArgumentOutOfRangeException(nameof(divisionId), "Division ID must be greater than zero.");
 		}
 
-		_context.LoadAllAsync().GetAwaiter().GetResult();
-		var createdOrUpdated = EnsureTournamentGamesCore(divisionId, requirePriorRoundsCompleted: false, forceReset: forceReset);
-		if (createdOrUpdated)
-		{
-			_context.SaveChangesAsync().GetAwaiter().GetResult();
-		}
-
-		return createdOrUpdated;
+		return GenerateOrResetTournamentGamesInternalAsync(divisionId, forceReset, saveChanges).GetAwaiter().GetResult();
 	}
 
 	public Task<bool> GenerateOrResetTournamentGamesAsync(int divisionId, bool forceReset = false)
 	{
+		return GenerateOrResetTournamentGamesAsync(divisionId, forceReset, saveChanges: true);
+	}
+
+	public Task<bool> GenerateOrResetTournamentGamesAsync(int divisionId, bool forceReset, bool saveChanges)
+	{
 		if (divisionId <= 0)
 		{
 			throw new ArgumentOutOfRangeException(nameof(divisionId), "Division ID must be greater than zero.");
 		}
 
-		return GenerateOrResetTournamentGamesInternalAsync(divisionId, forceReset);
+		return GenerateOrResetTournamentGamesInternalAsync(divisionId, forceReset, saveChanges);
 	}
 
-	private async Task<bool> GenerateOrResetTournamentGamesInternalAsync(int divisionId, bool forceReset)
+	private async Task<bool> GenerateOrResetTournamentGamesInternalAsync(int divisionId, bool forceReset, bool saveChanges)
 	{
 		await _context.LoadAllAsync();
 		var createdOrUpdated = EnsureTournamentGamesCore(divisionId, requirePriorRoundsCompleted: false, forceReset: forceReset);
-		if (createdOrUpdated)
+		if (createdOrUpdated && saveChanges)
 		{
 			await _context.SaveChangesAsync();
 		}
@@ -345,39 +351,35 @@ public class TournamentService : ITournamentService
 
 	public bool SyncTournamentProgression(int divisionId)
 	{
-		if (divisionId <= 0)
-		{
-			throw new ArgumentOutOfRangeException(nameof(divisionId), "Division ID must be greater than zero.");
-		}
-
-		_context.LoadAllAsync().GetAwaiter().GetResult();
-		var division = GetRequiredDivision(divisionId);
-		if (division.EndOfSeasonTournamentFormat == TournamentFormatType.None)
-		{
-			return false;
-		}
-
-		var seededTeams = GetRoundNineSeededStandings(division);
-		var updated = SyncTournamentProgressionCore(division, seededTeams);
-		if (updated)
-		{
-			_context.SaveChangesAsync().GetAwaiter().GetResult();
-		}
-
-		return updated;
+		return SyncTournamentProgression(divisionId, saveChanges: true);
 	}
 
-	public Task<bool> SyncTournamentProgressionAsync(int divisionId)
+	public bool SyncTournamentProgression(int divisionId, bool saveChanges)
 	{
 		if (divisionId <= 0)
 		{
 			throw new ArgumentOutOfRangeException(nameof(divisionId), "Division ID must be greater than zero.");
 		}
 
-		return SyncTournamentProgressionInternalAsync(divisionId);
+		return SyncTournamentProgressionInternalAsync(divisionId, saveChanges).GetAwaiter().GetResult();
 	}
 
-	private async Task<bool> SyncTournamentProgressionInternalAsync(int divisionId)
+	public Task<bool> SyncTournamentProgressionAsync(int divisionId)
+	{
+		return SyncTournamentProgressionAsync(divisionId, saveChanges: true);
+	}
+
+	public Task<bool> SyncTournamentProgressionAsync(int divisionId, bool saveChanges)
+	{
+		if (divisionId <= 0)
+		{
+			throw new ArgumentOutOfRangeException(nameof(divisionId), "Division ID must be greater than zero.");
+		}
+
+		return SyncTournamentProgressionInternalAsync(divisionId, saveChanges);
+	}
+
+	private async Task<bool> SyncTournamentProgressionInternalAsync(int divisionId, bool saveChanges)
 	{
 		await _context.LoadAllAsync();
 		var division = GetRequiredDivision(divisionId);
@@ -388,7 +390,7 @@ public class TournamentService : ITournamentService
 
 		var seededTeams = GetRoundNineSeededStandings(division);
 		var updated = SyncTournamentProgressionCore(division, seededTeams);
-		if (updated)
+		if (updated && saveChanges)
 		{
 			await _context.SaveChangesAsync();
 		}

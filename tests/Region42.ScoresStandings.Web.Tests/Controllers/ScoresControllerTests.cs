@@ -137,7 +137,7 @@ public class ScoresControllerTests
 			.ReturnsAsync(game1);
 		_mockGameService.Setup(s => s.GetGameByIdAsync(2))
 			.ReturnsAsync(game2);
-		_mockScoreService.Setup(s => s.EnterOrUpdateScoreAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<int>()))
+		_mockScoreService.Setup(s => s.EnterOrUpdateScoreAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<int>(), false))
 			.ReturnsAsync(new Score());
 
 		// Act
@@ -151,8 +151,9 @@ public class ScoresControllerTests
 		redirectResult.RouteValues["round"].Should().Be(1);
 
 		_mockScoreService.Verify(
-			s => s.EnterOrUpdateScoreAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<int>()),
+			s => s.EnterOrUpdateScoreAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<int>(), false),
 			Times.Exactly(2));
+		_mockScoreRepo.Verify(r => r.SaveChangesAsync(), Times.Once);
 
 		_controller.TempData["SuccessMessage"].Should().NotBeNull();
 	}
@@ -190,9 +191,9 @@ public class ScoresControllerTests
 			.ReturnsAsync(game1);
 		_mockGameService.Setup(s => s.GetGameByIdAsync(2))
 			.ReturnsAsync(game2);
-		_mockScoreService.Setup(s => s.EnterOrUpdateScoreAsync(1, It.IsAny<int>(), It.IsAny<int>()))
+		_mockScoreService.Setup(s => s.EnterOrUpdateScoreAsync(1, It.IsAny<int>(), It.IsAny<int>(), false))
 			.ThrowsAsync(new Exception("Database error"));
-		_mockScoreService.Setup(s => s.EnterOrUpdateScoreAsync(2, It.IsAny<int>(), It.IsAny<int>()))
+		_mockScoreService.Setup(s => s.EnterOrUpdateScoreAsync(2, It.IsAny<int>(), It.IsAny<int>(), false))
 			.ReturnsAsync(new Score());
 
 		// Act
@@ -218,7 +219,7 @@ public class ScoresControllerTests
 	public async Task Delete_WithValidGameId_DeletesScoreAndRedirects()
 	{
 		// Arrange
-		_mockScoreService.Setup(s => s.DeleteScoreAsync(1))
+		_mockScoreService.Setup(s => s.DeleteScoreAsync(1, false))
 			.ReturnsAsync(true);
 
 		// Act
@@ -227,14 +228,15 @@ public class ScoresControllerTests
 		// Assert
 		result.Should().BeOfType<RedirectToActionResult>();
 		_controller.TempData["SuccessMessage"].Should().NotBeNull();
-		_mockScoreService.Verify(s => s.DeleteScoreAsync(1), Times.Once);
+		_mockScoreService.Verify(s => s.DeleteScoreAsync(1, false), Times.Once);
+		_mockScoreRepo.Verify(r => r.SaveChangesAsync(), Times.Once);
 	}
 
 	[Fact]
 	public async Task Delete_WhenScoreNotFound_RedirectsWithError()
 	{
 		// Arrange
-		_mockScoreService.Setup(s => s.DeleteScoreAsync(1))
+		_mockScoreService.Setup(s => s.DeleteScoreAsync(1, false))
 			.ReturnsAsync(false);
 
 		// Act
@@ -276,9 +278,9 @@ public class ScoresControllerTests
 			.ReturnsAsync(game);
 		_mockGameService.Setup(s => s.GetGamesByDivisionAndRoundAsync(1, 1))
 			.ReturnsAsync(new List<Game> { game });
-		_mockGameService.Setup(s => s.UpdateGameAsync(It.IsAny<Game>()))
-			.ReturnsAsync((Game updated) => updated);
-		_mockScoreService.Setup(s => s.DeleteScoreAsync(1))
+		_mockGameService.Setup(s => s.UpdateGameAsync(It.IsAny<Game>(), false))
+			.ReturnsAsync((Game updated, bool _) => updated);
+		_mockScoreService.Setup(s => s.DeleteScoreAsync(1, false))
 			.ReturnsAsync(true);
 
 		// Act
@@ -288,11 +290,12 @@ public class ScoresControllerTests
 		result.Should().BeOfType<RedirectToActionResult>();
 		_controller.TempData["SuccessMessage"].Should().NotBeNull();
 		_controller.TempData["ErrorMessage"].Should().BeNull();
-		_mockScoreService.Verify(s => s.DeleteScoreAsync(1), Times.Once);
+		_mockScoreService.Verify(s => s.DeleteScoreAsync(1, false), Times.Once);
 		_mockScoreService.Verify(
-			s => s.EnterOrUpdateScoreAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<int>()),
+			s => s.EnterOrUpdateScoreAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>()),
 			Times.Never);
-		_mockGameService.Verify(s => s.UpdateGameAsync(It.Is<Game>(g => g.Status == GameStatus.Scheduled)), Times.Once);
+		_mockGameService.Verify(s => s.UpdateGameAsync(It.Is<Game>(g => g.Status == GameStatus.Scheduled), false), Times.Once);
+		_mockScoreRepo.Verify(r => r.SaveChangesAsync(), Times.Once);
 	}
 
 	[Fact]
@@ -409,16 +412,16 @@ public class ScoresControllerTests
 			.ReturnsAsync(new List<Game> { originalGame, round8Game });
 
 		Game? createdMakeup = null;
-		_mockGameService.Setup(s => s.CreateGameAsync(It.IsAny<Game>()))
-			.Callback<Game>(g =>
+		_mockGameService.Setup(s => s.CreateGameAsync(It.IsAny<Game>(), false))
+			.Callback<Game, bool>((g, _) =>
 			{
 				g.Id = 775;
 				createdMakeup = g;
 			})
-			.ReturnsAsync((Game g) => g);
+			.ReturnsAsync((Game g, bool _) => g);
 
-		_mockGameService.Setup(s => s.UpdateGameAsync(It.IsAny<Game>()))
-			.ReturnsAsync((Game g) => g);
+		_mockGameService.Setup(s => s.UpdateGameAsync(It.IsAny<Game>(), false))
+			.ReturnsAsync((Game g, bool _) => g);
 
 		var scores = new List<ScoreUpdateDto>
 		{
@@ -454,6 +457,7 @@ public class ScoresControllerTests
 		createdMakeup.Location.Should().Be("Dos Vientos 1 (games) - Dos Vientos Community Park");
 		createdMakeup.RescheduledFromGameId.Should().Be(10);
 		createdMakeup.Status.Should().Be(GameStatus.Scheduled);
+		_mockScoreRepo.Verify(r => r.SaveChangesAsync(), Times.Once);
 	}
 
 	[Fact]
@@ -484,8 +488,8 @@ public class ScoresControllerTests
 			.ReturnsAsync(new List<Game> { originalGame });
 		_mockGameService.Setup(s => s.GetGamesByDivisionAsync(1))
 			.ReturnsAsync(new List<Game> { originalGame, existingMakeup, round9Game });
-		_mockGameService.Setup(s => s.UpdateGameAsync(It.IsAny<Game>()))
-			.ReturnsAsync((Game g) => g);
+		_mockGameService.Setup(s => s.UpdateGameAsync(It.IsAny<Game>(), false))
+			.ReturnsAsync((Game g, bool _) => g);
 
 		var scores = new List<ScoreUpdateDto>
 		{
@@ -505,9 +509,10 @@ public class ScoresControllerTests
 
 		// Assert
 		result.Should().BeOfType<RedirectToActionResult>();
-		_mockGameService.Verify(s => s.CreateGameAsync(It.IsAny<Game>()), Times.Never);
+		_mockGameService.Verify(s => s.CreateGameAsync(It.IsAny<Game>(), It.IsAny<bool>()), Times.Never);
 		existingMakeup.Round.Should().Be(9);
 		existingMakeup.Location.Should().Be("CC5 - Conejo Creek South Park");
+		_mockScoreRepo.Verify(r => r.SaveChangesAsync(), Times.Once);
 	}
 
 	[Fact]
@@ -527,7 +532,7 @@ public class ScoresControllerTests
 			.ReturnsAsync(makeupGame);
 		_mockGameService.Setup(s => s.GetGamesByDivisionAndRoundAsync(1, 8))
 			.ReturnsAsync(new List<Game> { regularGame, makeupGame });
-		_mockScoreService.Setup(s => s.EnterOrUpdateScoreAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<int>()))
+		_mockScoreService.Setup(s => s.EnterOrUpdateScoreAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<int>(), false))
 			.ReturnsAsync(new Score());
 
 		var scores = new List<ScoreUpdateDto>
@@ -544,8 +549,9 @@ public class ScoresControllerTests
 		_controller.TempData["ErrorMessage"].Should().BeNull();
 		_controller.TempData["SuccessMessage"].Should().NotBeNull();
 		_mockScoreService.Verify(
-			s => s.EnterOrUpdateScoreAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<int>()),
+			s => s.EnterOrUpdateScoreAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<int>(), false),
 			Times.Exactly(2));
+		_mockScoreRepo.Verify(r => r.SaveChangesAsync(), Times.Once);
 	}
 
 	[Fact]
@@ -574,9 +580,9 @@ public class ScoresControllerTests
 		_mockGameService.Setup(s => s.GetGameByIdAsync(901)).ReturnsAsync(poolGame);
 		_mockGameService.Setup(s => s.GetGameByIdAsync(902)).ReturnsAsync(finalGame);
 		_mockGameService.Setup(s => s.GetGamesByDivisionAndRoundAsync(1, 10)).ReturnsAsync(new List<Game> { poolGame, finalGame });
-		_mockScoreService.Setup(s => s.EnterOrUpdatePoolPlayScoreAsync(901, 2, 1, false, 0, 0, 1, 0))
+		_mockScoreService.Setup(s => s.EnterOrUpdatePoolPlayScoreAsync(901, 2, 1, false, 0, 0, 1, 0, false))
 			.ReturnsAsync(new PoolPlayScore());
-		_mockScoreService.Setup(s => s.EnterOrUpdateEliminationScoreAsync(902, 1, 1, false, true, 4, 3))
+		_mockScoreService.Setup(s => s.EnterOrUpdateEliminationScoreAsync(902, 1, 1, false, true, 4, 3, false))
 			.ReturnsAsync(new EliminationScore());
 
 		var scores = new List<ScoreUpdateDto>
@@ -589,8 +595,9 @@ public class ScoresControllerTests
 
 		result.Should().BeOfType<RedirectToActionResult>();
 		_controller.TempData["ErrorMessage"].Should().BeNull();
-		_mockScoreService.Verify(s => s.EnterOrUpdatePoolPlayScoreAsync(901, 2, 1, false, 0, 0, 1, 0), Times.Once);
-		_mockScoreService.Verify(s => s.EnterOrUpdateEliminationScoreAsync(902, 1, 1, false, true, 4, 3), Times.Once);
+		_mockScoreService.Verify(s => s.EnterOrUpdatePoolPlayScoreAsync(901, 2, 1, false, 0, 0, 1, 0, false), Times.Once);
+		_mockScoreService.Verify(s => s.EnterOrUpdateEliminationScoreAsync(902, 1, 1, false, true, 4, 3, false), Times.Once);
+		_mockScoreRepo.Verify(r => r.SaveChangesAsync(), Times.Once);
 	}
 
 	[Fact]
@@ -611,7 +618,7 @@ public class ScoresControllerTests
 
 		_mockGameService.Setup(s => s.GetGameByIdAsync(910)).ReturnsAsync(unscheduledGame);
 		_mockGameService.Setup(s => s.GetGamesByDivisionAndRoundAsync(1, 10)).ReturnsAsync(new List<Game> { unscheduledGame });
-		_mockGameService.Setup(s => s.UpdateGameAsync(It.IsAny<Game>())).ReturnsAsync((Game g) => g);
+		_mockGameService.Setup(s => s.UpdateGameAsync(It.IsAny<Game>(), false)).ReturnsAsync((Game g, bool _) => g);
 
 		var scores = new List<ScoreUpdateDto>
 		{
@@ -634,6 +641,51 @@ public class ScoresControllerTests
 		unscheduledGame.Location.Should().Be("Dos Vientos 1 - Dos Vientos Community Park");
 		unscheduledGame.ScheduledDateTime.Should().NotBe(default);
 		unscheduledGame.RescheduledToGameId.Should().BeNull();
-		_mockGameService.Verify(s => s.CreateGameAsync(It.IsAny<Game>()), Times.Never);
+		_mockGameService.Verify(s => s.CreateGameAsync(It.IsAny<Game>(), It.IsAny<bool>()), Times.Never);
+		_mockScoreRepo.Verify(r => r.SaveChangesAsync(), Times.Once);
+	}
+
+	[Fact]
+	public async Task Entry_Post_WithScheduledOrCompletedGameScheduleCorrection_UpdatesDateTimeAndLocationInPlace()
+	{
+		var completedGame = _builder.BuildGame(1, 1, 2, 1, GameStatus.Completed);
+		completedGame.Id = 911;
+		completedGame.ScheduledDateTime = new DateTime(2026, 11, 7, 16, 0, 0, DateTimeKind.Utc);
+		completedGame.Location = "Old Field";
+		completedGame.Score = new Score { GameId = 911, HomeScore = 2, AwayScore = 1 };
+
+		_mockGameService.Setup(s => s.GetGameByIdAsync(911)).ReturnsAsync(completedGame);
+		_mockGameService.Setup(s => s.GetGamesByDivisionAndRoundAsync(1, 1)).ReturnsAsync(new List<Game> { completedGame });
+		_mockGameService.Setup(s => s.UpdateGameAsync(It.IsAny<Game>(), false)).ReturnsAsync((Game g, bool _) => g);
+
+		var scores = new List<ScoreUpdateDto>
+		{
+			new ScoreUpdateDto
+			{
+				GameId = 911,
+				HomeTeamId = 1,
+				AwayTeamId = 2,
+				HomeScore = 2,
+				AwayScore = 1,
+				Status = GameStatus.Completed,
+				NewScheduledDateTime = new DateTime(2026, 11, 7, 11, 30, 0),
+				NewLocation = "Corrected Field"
+			}
+		};
+
+		var result = await _controller.Entry(scores, 1, 1);
+
+		result.Should().BeOfType<RedirectToActionResult>();
+		_controller.TempData["ErrorMessage"].Should().BeNull();
+		_controller.TempData["SuccessMessage"].Should().Be("1 game(s) saved successfully.");
+		completedGame.Status.Should().Be(GameStatus.Completed);
+		completedGame.Location.Should().Be("Corrected Field");
+		completedGame.ScheduledDateTime.Should().Be(new DateTime(2026, 11, 7, 19, 30, 0, DateTimeKind.Utc));
+		_mockGameService.Verify(s => s.UpdateGameAsync(completedGame, false), Times.Once);
+		// Score was unchanged so EnterOrUpdateScoreAsync should not be called
+		_mockScoreService.Verify(
+			s => s.EnterOrUpdateScoreAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>()),
+			Times.Never);
+		_mockScoreRepo.Verify(r => r.SaveChangesAsync(), Times.Once);
 	}
 }
