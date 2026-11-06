@@ -265,6 +265,7 @@ public class ScoresController : Controller
 				}
 
 				var wasUnscheduled = game.Status == GameStatus.Unscheduled;
+				var wasRescheduled = game.Status == GameStatus.Rescheduled;
 				if (wasUnscheduled &&
 					scoreUpdate.Status == GameStatus.Scheduled &&
 					!scoreUpdate.NewScheduledDateTime.HasValue &&
@@ -292,45 +293,82 @@ public class ScoresController : Controller
 					_logger.LogInformation("Updated status for game {GameId} to {Status}", scoreUpdate.GameId, scoreUpdate.Status);
 				}
 
-				if (scoreUpdate.Status == GameStatus.Unscheduled || (wasUnscheduled && scoreUpdate.Status != GameStatus.Rescheduled))
+				if (scoreUpdate.Status != GameStatus.Rescheduled)
 				{
+					DateTime? oldMakeupDateTime = null;
+					string? oldMakeupLocation = null;
+
+					if (game.RescheduledToGameId.HasValue)
+					{
+						var oldMakeupId = game.RescheduledToGameId.Value;
+						var oldMakeup = await _gameService.GetGameByIdAsync(oldMakeupId);
+						if (oldMakeup != null)
+						{
+							oldMakeupDateTime = oldMakeup.ScheduledDateTime;
+							oldMakeupLocation = oldMakeup.Location;
+							if (oldMakeup.Score == null)
+							{
+								await _gameService.DeleteGameAsync(oldMakeupId, saveChanges: false);
+							}
+						}
+						game.RescheduledToGameId = null;
+						gameChanged = true;
+					}
+
 					if (scoreUpdate.NewScheduledDateTime.HasValue)
 					{
-						game.ScheduledDateTime = TimezoneHelper.ToUtc(scoreUpdate.NewScheduledDateTime.Value);
-						if (!string.IsNullOrWhiteSpace(scoreUpdate.NewLocation))
-						{
-							game.Location = scoreUpdate.NewLocation.Trim();
-						}
-						if (game.Status == GameStatus.Unscheduled)
-						{
-							game.Status = GameStatus.Scheduled;
-						}
-						gameChanged = true;
-						_logger.LogInformation("Scheduled game {GameId} on {ScheduledDateTime} at {Location}",
-							scoreUpdate.GameId, game.ScheduledDateTime, game.Location);
-					}
-					else
-					{
-						if (scoreUpdate.Status == GameStatus.Unscheduled && game.ScheduledDateTime != default)
+						var newUtcDateTime = TimezoneHelper.ToUtc(scoreUpdate.NewScheduledDateTime.Value);
+						var existingUtcMinute = game.ScheduledDateTime == default
+							? default
+							: new DateTime(
+								game.ScheduledDateTime.Year,
+								game.ScheduledDateTime.Month,
+								game.ScheduledDateTime.Day,
+								game.ScheduledDateTime.Hour,
+								game.ScheduledDateTime.Minute,
+								0,
+								DateTimeKind.Utc);
+
+						if (!wasUnscheduled && scoreUpdate.Status == GameStatus.Unscheduled && existingUtcMinute == newUtcDateTime)
 						{
 							game.ScheduledDateTime = default;
 							gameChanged = true;
 						}
+						else if (!(wasRescheduled && oldMakeupDateTime == newUtcDateTime) && existingUtcMinute != newUtcDateTime)
+						{
+							game.ScheduledDateTime = newUtcDateTime;
+							if (game.Status == GameStatus.Unscheduled)
+							{
+								game.Status = GameStatus.Scheduled;
+							}
+							gameChanged = true;
+							_logger.LogInformation("Scheduled game {GameId} on {ScheduledDateTime}",
+								scoreUpdate.GameId, game.ScheduledDateTime);
+						}
+					}
+					else if (scoreUpdate.Status == GameStatus.Unscheduled && game.ScheduledDateTime != default)
+					{
+						game.ScheduledDateTime = default;
+						gameChanged = true;
+					}
 
-						var trimmedLocation = scoreUpdate.NewLocation?.Trim() ?? string.Empty;
-						if (scoreUpdate.NewLocation != null && game.Location != trimmedLocation)
+					if (scoreUpdate.NewLocation != null)
+					{
+						var trimmedLocation = scoreUpdate.NewLocation.Trim();
+						if (!(wasRescheduled && oldMakeupLocation == trimmedLocation) && game.Location != trimmedLocation)
 						{
 							game.Location = trimmedLocation;
 							gameChanged = true;
+							_logger.LogInformation("Updated location for game {GameId} to {Location}",
+								scoreUpdate.GameId, game.Location);
 						}
 					}
 				}
-
-				if (scoreUpdate.Status == GameStatus.Rescheduled)
+				else
 				{
 					var newUtcDateTime = TimezoneHelper.ToUtc(scoreUpdate.NewScheduledDateTime!.Value);
 					var newLocation = !string.IsNullOrWhiteSpace(scoreUpdate.NewLocation)
-						? scoreUpdate.NewLocation
+						? scoreUpdate.NewLocation.Trim()
 						: game.Location;
 
 					int targetRound;
@@ -356,13 +394,22 @@ public class ScoresController : Controller
 
 					if (makeupGame != null)
 					{
-						makeupGame.HomeTeamId = game.HomeTeamId;
-						makeupGame.AwayTeamId = game.AwayTeamId;
-						makeupGame.ScheduledDateTime = newUtcDateTime;
-						makeupGame.Location = newLocation;
-						makeupGame.Round = targetRound;
-						makeupGame.RescheduledFromGameId = game.Id;
-						await _gameService.UpdateGameAsync(makeupGame);
+						if (makeupGame.HomeTeamId != game.HomeTeamId ||
+							makeupGame.AwayTeamId != game.AwayTeamId ||
+							makeupGame.ScheduledDateTime != newUtcDateTime ||
+							makeupGame.Location != newLocation ||
+							makeupGame.Round != targetRound ||
+							makeupGame.RescheduledFromGameId != game.Id)
+						{
+							makeupGame.HomeTeamId = game.HomeTeamId;
+							makeupGame.AwayTeamId = game.AwayTeamId;
+							makeupGame.ScheduledDateTime = newUtcDateTime;
+							makeupGame.Location = newLocation;
+							makeupGame.Round = targetRound;
+							makeupGame.RescheduledFromGameId = game.Id;
+							await _gameService.UpdateGameAsync(makeupGame, saveChanges: false);
+							gameChanged = true;
+						}
 					}
 					else
 					{
@@ -376,80 +423,80 @@ public class ScoresController : Controller
 							Round = targetRound,
 							Status = GameStatus.Scheduled,
 							RescheduledFromGameId = game.Id
-						});
+						}, saveChanges: false);
 						game.RescheduledToGameId = createdMakeup.Id;
+						gameChanged = true;
 					}
 
-					gameChanged = true;
-					_logger.LogInformation("Rescheduled game {GameId} to round {TargetRound} on {ScheduledDateTime} at {Location}",
-						scoreUpdate.GameId, targetRound, newUtcDateTime, newLocation);
-				}
-				else if (game.RescheduledToGameId.HasValue)
-				{
-					var oldMakeupId = game.RescheduledToGameId.Value;
-					var oldMakeup = await _gameService.GetGameByIdAsync(oldMakeupId);
-					if (oldMakeup != null && oldMakeup.Score == null)
+					if (gameChanged)
 					{
-						await _gameService.DeleteGameAsync(oldMakeupId);
+						_logger.LogInformation("Rescheduled game {GameId} to round {TargetRound} on {ScheduledDateTime} at {Location}",
+							scoreUpdate.GameId, targetRound, newUtcDateTime, newLocation);
 					}
-					game.RescheduledToGameId = null;
-					gameChanged = true;
 				}
 
 				if (gameChanged)
 				{
-					await _gameService.UpdateGameAsync(game);
+					await _gameService.UpdateGameAsync(game, saveChanges: false);
 					_logger.LogInformation("Updated game {GameId}: Home={HomeTeamId}, Away={AwayTeamId}",
 						scoreUpdate.GameId, scoreUpdate.HomeTeamId, scoreUpdate.AwayTeamId);
 				}
 
+				var scoreChanged = false;
 				var scoreCleared = false;
 				if (hasHomeScore && hasAwayScore)
 				{
-					if (game is PoolPlayGame)
+					if (HasScoreChanged(game, scoreUpdate))
 					{
-						await _scoreService.EnterOrUpdatePoolPlayScoreAsync(
-							scoreUpdate.GameId,
-							scoreUpdate.HomeScore!.Value,
-							scoreUpdate.AwayScore!.Value,
-							scoreUpdate.IsForfeit,
-							scoreUpdate.HomeRedCards,
-							scoreUpdate.AwayRedCards,
-							scoreUpdate.HomeYellowCards,
-							scoreUpdate.AwayYellowCards);
-					}
-					else if (game is EliminationGame)
-					{
-						await _scoreService.EnterOrUpdateEliminationScoreAsync(
-							scoreUpdate.GameId,
-							scoreUpdate.HomeScore!.Value,
-							scoreUpdate.AwayScore!.Value,
-							scoreUpdate.IsForfeit,
-							scoreUpdate.IsDecidedByPenalties,
-							scoreUpdate.HomePenaltyScore,
-							scoreUpdate.AwayPenaltyScore);
-					}
-					else
-					{
-						await _scoreService.EnterOrUpdateScoreAsync(
-							scoreUpdate.GameId,
-							scoreUpdate.HomeScore!.Value,
-							scoreUpdate.AwayScore!.Value);
-					}
+						if (game is PoolPlayGame)
+						{
+							await _scoreService.EnterOrUpdatePoolPlayScoreAsync(
+								scoreUpdate.GameId,
+								scoreUpdate.HomeScore!.Value,
+								scoreUpdate.AwayScore!.Value,
+								scoreUpdate.IsForfeit,
+								scoreUpdate.HomeRedCards,
+								scoreUpdate.AwayRedCards,
+								scoreUpdate.HomeYellowCards,
+								scoreUpdate.AwayYellowCards,
+								saveChanges: false);
+						}
+						else if (game is EliminationGame)
+						{
+							await _scoreService.EnterOrUpdateEliminationScoreAsync(
+								scoreUpdate.GameId,
+								scoreUpdate.HomeScore!.Value,
+								scoreUpdate.AwayScore!.Value,
+								scoreUpdate.IsForfeit,
+								scoreUpdate.IsDecidedByPenalties,
+								scoreUpdate.HomePenaltyScore,
+								scoreUpdate.AwayPenaltyScore,
+								saveChanges: false);
+						}
+						else
+						{
+							await _scoreService.EnterOrUpdateScoreAsync(
+								scoreUpdate.GameId,
+								scoreUpdate.HomeScore!.Value,
+								scoreUpdate.AwayScore!.Value,
+								saveChanges: false);
+						}
 
-					_logger.LogInformation("Score saved for game {GameId}: {HomeScore}-{AwayScore}",
-						scoreUpdate.GameId, scoreUpdate.HomeScore, scoreUpdate.AwayScore);
+						scoreChanged = true;
+						_logger.LogInformation("Score saved for game {GameId}: {HomeScore}-{AwayScore}",
+							scoreUpdate.GameId, scoreUpdate.HomeScore, scoreUpdate.AwayScore);
+					}
 				}
 				else if (game.Score?.HomeScore != null || game.Score?.AwayScore != null)
 				{
-					scoreCleared = await _scoreService.DeleteScoreAsync(scoreUpdate.GameId);
+					scoreCleared = await _scoreService.DeleteScoreAsync(scoreUpdate.GameId, saveChanges: false);
 					if (scoreCleared)
 					{
 						_logger.LogInformation("Cleared score for game {GameId}", scoreUpdate.GameId);
 					}
 				}
 
-				if (gameChanged || (hasHomeScore && hasAwayScore) || scoreCleared)
+				if (gameChanged || scoreChanged || scoreCleared)
 				{
 					successCount++;
 				}
@@ -462,36 +509,54 @@ public class ScoresController : Controller
 			}
 		}
 
-		if (poolPlayTiebreakerWinnerTeamId.HasValue)
+		try
 		{
-			var division = await _divisionRepository.GetByIdAsync(divisionId);
-			if (division != null)
+			if (poolPlayTiebreakerWinnerTeamId.HasValue)
 			{
-				var newTiebreakerId = poolPlayTiebreakerWinnerTeamId.Value > 0 ? poolPlayTiebreakerWinnerTeamId.Value : (int?)null;
-				if (division.PoolPlayTiebreakerWinnerTeamId != newTiebreakerId)
+				var division = await _divisionRepository.GetByIdAsync(divisionId);
+				if (division != null)
 				{
-					division.PoolPlayTiebreakerWinnerTeamId = newTiebreakerId;
-					_divisionRepository.Update(division);
-					await _divisionRepository.SaveChangesAsync();
-					hasTournamentGames = true;
-					successCount++;
+					var newTiebreakerId = poolPlayTiebreakerWinnerTeamId.Value > 0 ? poolPlayTiebreakerWinnerTeamId.Value : (int?)null;
+					if (division.PoolPlayTiebreakerWinnerTeamId != newTiebreakerId)
+					{
+						division.PoolPlayTiebreakerWinnerTeamId = newTiebreakerId;
+						_divisionRepository.Update(division);
+						hasTournamentGames = true;
+						successCount++;
+					}
 				}
 			}
-		}
 
-		if (hasTournamentGames && _tournamentService != null)
-		{
-			await _tournamentService.SyncTournamentProgressionAsync(divisionId);
-			if (_standingsRefreshService != null)
+			if (successCount > 0)
 			{
-				await _standingsRefreshService.RefreshDivisionStandingsAsync(divisionId);
-				await _divisionRepository.SaveChangesAsync();
+				if (hasTournamentGames && _tournamentService != null)
+				{
+					await _tournamentService.SyncTournamentProgressionAsync(divisionId, saveChanges: false);
+				}
+
+				if (_standingsRefreshService != null)
+				{
+					await _standingsRefreshService.RefreshDivisionStandingsAsync(divisionId);
+				}
+
+				await _scoreRepository.SaveChangesAsync();
 			}
+		}
+		catch (Exception ex)
+		{
+			errorCount++;
+			errors.Add($"Failed to persist changes: {ex.Message}");
+			successCount = 0;
+			_logger.LogError(ex, "Error persisting batch updates for division {DivisionId}, round {Round}", divisionId, round);
 		}
 
 		if (successCount > 0)
 		{
 			TempData["SuccessMessage"] = $"{successCount} game(s) saved successfully.";
+		}
+		else if (errorCount == 0)
+		{
+			TempData["SuccessMessage"] = "No changes to save.";
 		}
 
 		if (errorCount > 0)
@@ -500,6 +565,70 @@ public class ScoresController : Controller
 		}
 
 		return RedirectToAction(nameof(Entry), new { divisionId, round });
+	}
+
+	private static bool HasScoreChanged(Game game, ScoreUpdateDto scoreUpdate)
+	{
+		if (!scoreUpdate.HomeScore.HasValue || !scoreUpdate.AwayScore.HasValue)
+		{
+			return false;
+		}
+
+		var existingScore = game.Score;
+		if (existingScore == null)
+		{
+			return true;
+		}
+
+		if (existingScore.HomeScore != scoreUpdate.HomeScore.Value ||
+			existingScore.AwayScore != scoreUpdate.AwayScore.Value)
+		{
+			return true;
+		}
+
+		if (game is PoolPlayGame)
+		{
+			if (existingScore is not PoolPlayScore existingPoolScore)
+			{
+				return true;
+			}
+
+			return existingPoolScore.IsForfeit != scoreUpdate.IsForfeit ||
+				existingPoolScore.HomeRedCards != scoreUpdate.HomeRedCards ||
+				existingPoolScore.AwayRedCards != scoreUpdate.AwayRedCards ||
+				existingPoolScore.HomeYellowCards != scoreUpdate.HomeYellowCards ||
+				existingPoolScore.AwayYellowCards != scoreUpdate.AwayYellowCards;
+		}
+
+		if (game is EliminationGame)
+		{
+			if (existingScore is not EliminationScore existingElimScore)
+			{
+				return true;
+			}
+
+			var decidedByPenalties = !scoreUpdate.IsForfeit &&
+				scoreUpdate.HomeScore.Value == scoreUpdate.AwayScore.Value &&
+				scoreUpdate.HomePenaltyScore.HasValue &&
+				scoreUpdate.AwayPenaltyScore.HasValue;
+			var rawPkEntered = scoreUpdate.IsDecidedByPenalties ||
+				scoreUpdate.HomePenaltyScore.HasValue ||
+				scoreUpdate.AwayPenaltyScore.HasValue;
+			if (!decidedByPenalties && rawPkEntered)
+			{
+				return true;
+			}
+
+			var expectedHomePk = decidedByPenalties ? scoreUpdate.HomePenaltyScore : null;
+			var expectedAwayPk = decidedByPenalties ? scoreUpdate.AwayPenaltyScore : null;
+
+			return existingElimScore.IsForfeit != scoreUpdate.IsForfeit ||
+				existingElimScore.IsDecidedByPenalties != decidedByPenalties ||
+				existingElimScore.HomePenaltyScore != expectedHomePk ||
+				existingElimScore.AwayPenaltyScore != expectedAwayPk;
+		}
+
+		return false;
 	}
 
 	// POST: Scores/RegenerateTournament
@@ -515,12 +644,12 @@ public class ScoresController : Controller
 
 		try
 		{
-			await _tournamentService.GenerateOrResetTournamentGamesAsync(divisionId, forceReset);
+			await _tournamentService.GenerateOrResetTournamentGamesAsync(divisionId, forceReset, saveChanges: false);
 			if (_standingsRefreshService != null)
 			{
 				await _standingsRefreshService.RefreshDivisionStandingsAsync(divisionId);
-				await _divisionRepository.SaveChangesAsync();
 			}
+			await _divisionRepository.SaveChangesAsync();
 
 			TempData["SuccessMessage"] = forceReset
 				? "Tournament games regenerated and reset from Round 9 standings."
@@ -542,13 +671,20 @@ public class ScoresController : Controller
 	{
 		try
 		{
-			var deleted = await _scoreService.DeleteScoreAsync(gameId);
+			var deleted = await _scoreService.DeleteScoreAsync(gameId, saveChanges: false);
 			if (deleted)
 			{
 				if (_tournamentService != null)
 				{
-					await _tournamentService.SyncTournamentProgressionAsync(divisionId);
+					await _tournamentService.SyncTournamentProgressionAsync(divisionId, saveChanges: false);
 				}
+
+				if (_standingsRefreshService != null)
+				{
+					await _standingsRefreshService.RefreshDivisionStandingsAsync(divisionId);
+				}
+
+				await _scoreRepository.SaveChangesAsync();
 
 				TempData["SuccessMessage"] = "Score deleted successfully.";
 				_logger.LogInformation("Score deleted for game {GameId}", gameId);

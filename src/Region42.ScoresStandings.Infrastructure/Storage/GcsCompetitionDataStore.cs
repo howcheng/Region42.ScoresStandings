@@ -117,6 +117,10 @@ public class GcsCompetitionDataStore : ICompetitionDataStore
 
 				expectedGeneration = (await GetObjectAsync<T>(objectPath, cancellationToken)).Generation;
 			}
+			catch (GoogleApiException ex) when (ex.HttpStatusCode == System.Net.HttpStatusCode.TooManyRequests && attempt < MaxRetryAttempts - 1)
+			{
+				await Task.Delay(TimeSpan.FromMilliseconds(500 * (attempt + 1)), cancellationToken);
+			}
 		}
 	}
 }

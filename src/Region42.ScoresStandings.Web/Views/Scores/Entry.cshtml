@@ -326,16 +326,46 @@
 						</div>
 						<div class="score-field score-field-status">
 							<label for="status_@index" class="score-field-label d-md-none">Status</label>
-							<select id="status_@index"
-									name="scores[@index].Status"
-									class="form-select form-select-sm game-status-select"
-									data-index="@index"
-									data-was-unscheduled="@(game.Status == GameStatus.Unscheduled || game.ScheduledDateTime == default ? "true" : "false")">
-								@foreach (GameStatus status in Enum.GetValues<GameStatus>())
-								{
-									<option value="@((int)status)" selected="@(status == game.Status)">@status</option>
-								}
-							</select>
+							@{
+								var showScheduleFields = game.Status is GameStatus.Rescheduled or GameStatus.Unscheduled;
+								var originalDateTimeStr = game.ScheduledDateTime != default
+									? game.ScheduledDateTime.ToString("yyyy-MM-ddTHH:mm")
+									: "";
+								var rescheduledDateTimeStr = game.RescheduledDateTime?.ToString("yyyy-MM-ddTHH:mm") ?? originalDateTimeStr;
+								var effectiveDateTimeStr = game.Status == GameStatus.Rescheduled
+									? rescheduledDateTimeStr
+									: originalDateTimeStr;
+								var effectiveLocation = game.Status == GameStatus.Rescheduled
+									? (game.RescheduledLocation ?? game.Location)
+									: game.Location;
+							}
+							<div class="d-flex align-items-center gap-1 w-100">
+								<select id="status_@index"
+										name="scores[@index].Status"
+										class="form-select form-select-sm game-status-select"
+										data-index="@index"
+										data-was-unscheduled="@(game.Status == GameStatus.Unscheduled || game.ScheduledDateTime == default ? "true" : "false")"
+										data-was-rescheduled="@(game.Status == GameStatus.Rescheduled ? "true" : "false")"
+										data-original-datetime="@originalDateTimeStr"
+										data-original-location="@game.Location"
+										data-rescheduled-datetime="@rescheduledDateTimeStr"
+										data-rescheduled-location="@(game.RescheduledLocation ?? game.Location)">
+									@foreach (GameStatus status in Enum.GetValues<GameStatus>())
+									{
+										<option value="@((int)status)" selected="@(status == game.Status)">@status</option>
+									}
+								</select>
+								<button type="button"
+										id="toggleScheduleBtn_@index"
+										class="btn btn-sm btn-outline-secondary schedule-edit-toggle flex-shrink-0"
+										data-index="@index"
+										title="Edit date/time and location"
+										aria-label="Edit date/time and location"
+										aria-expanded="@(showScheduleFields ? "true" : "false")"
+										aria-controls="rescheduleFields_@index">
+									<i class="bi bi-pencil-square" aria-hidden="true"></i>
+								</button>
+							</div>
 							@if (tournamentGame != null)
 							{
 								<div class="tournament-toggles mt-1 d-flex flex-wrap gap-2">
@@ -366,24 +396,18 @@
 									}
 								</div>
 							}
-							@{
-								var showScheduleFields = game.Status is GameStatus.Rescheduled or GameStatus.Unscheduled;
-								var effectiveDateTime = game.Status == GameStatus.Rescheduled
-									? (game.RescheduledDateTime ?? (game.ScheduledDateTime != default ? game.ScheduledDateTime : (DateTime?)null))
-									: (game.ScheduledDateTime != default ? game.ScheduledDateTime : (DateTime?)null);
-							}
 							<div id="rescheduleFields_@index" class="reschedule-fields mt-2 @(showScheduleFields ? "" : "d-none")">
-								<label for="newDateTime_@index" class="form-label form-label-sm">New Date/Time</label>
+								<label for="newDateTime_@index" class="form-label form-label-sm">Date/Time</label>
 								<input type="datetime-local"
 									   id="newDateTime_@index"
 									   name="scores[@index].NewScheduledDateTime"
-									   value="@(effectiveDateTime?.ToString("yyyy-MM-ddTHH:mm") ?? "")"
+									   value="@effectiveDateTimeStr"
 									   class="form-control form-control-sm" />
-								<label for="newLocation_@index" class="form-label form-label-sm mt-1">New Location</label>
+								<label for="newLocation_@index" class="form-label form-label-sm mt-1">Location</label>
 								<input type="text"
 									   id="newLocation_@index"
 									   name="scores[@index].NewLocation"
-									   value="@(game.RescheduledLocation ?? game.Location)"
+									   value="@effectiveLocation"
 									   class="form-control form-control-sm" />
 								<div id="newRoundContainer_@index" class="@(game.Status == GameStatus.Rescheduled ? "" : "d-none")">
 									<label for="newRound_@index" class="form-label form-label-sm mt-1">New Round (optional)</label>

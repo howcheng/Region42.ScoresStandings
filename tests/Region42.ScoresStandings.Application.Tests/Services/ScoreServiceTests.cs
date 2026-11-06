@@ -575,5 +575,23 @@ public class ScoreServiceTests
 			.WithMessage("*1-0 or 0-1*");
 	}
 
+	[Fact]
+	public async Task EnterOrUpdateScoreAsync_WithSaveChangesFalse_DefersStandingsRefreshAndSave()
+	{
+		var game = TestDataBuilder.CreateGame(id: 1, divisionId: 1, homeTeamId: 1, awayTeamId: 2, scheduledDateTime: DateTime.UtcNow);
+		_mockGameRepository.Setup(r => r.GetByIdAsync(1)).ReturnsAsync(game);
+		_mockScoreRepository.Setup(r => r.FindAsync(It.IsAny<Expression<Func<Score, bool>>>())).ReturnsAsync(new List<Score>());
+		_mockScoreRepository.Setup(r => r.AddAsync(It.IsAny<Score>())).Returns(Task.CompletedTask);
+
+		var result = await _scoreService.EnterOrUpdateScoreAsync(1, 3, 2, saveChanges: false);
+
+		result.Should().NotBeNull();
+		result.HomeScore.Should().Be(3);
+		result.AwayScore.Should().Be(2);
+		_mockScoreRepository.Verify(r => r.AddAsync(It.IsAny<Score>()), Times.Once);
+		_mockStandingsRefreshService.Verify(r => r.RefreshDivisionStandingsAsync(It.IsAny<int>()), Times.Never);
+		_mockScoreRepository.Verify(r => r.SaveChangesAsync(), Times.Never);
+	}
+
 	#endregion
 }
