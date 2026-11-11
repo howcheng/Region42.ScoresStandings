@@ -54,7 +54,7 @@ Instead of scanning the codebase to reconstruct business logic, follow these spe
 *   👉 **[CSV Import Feature Specs](docs/features/csv-import.md)**
 	*   *Covers:* SportsConnect CSV structural schemas, rigid multi-stage pre-import validation (showing all issues at once), preview tables, and the replacement import logic with "ShortName" generation.
 *   👉 **[Scores Entry Feature Specs](docs/features/scores-entry.md)**
-	*   *Covers:* Score record models, cascading dropdown grids (Division → Round), double score validation models (both scores required), team scheduled-game conflict policies, and retroactive audits.
+	*   *Covers:* Score record models, cascading dropdown grids (Division → Round), double score validation, tournament score inputs (forfeits, cards, penalty shootouts), in-place schedule/location editing vs. weather reschedules, team uniqueness per round, and batch JSON persistence.
 *   👉 **[Volunteer Points Feature Specs](docs/features/volunteer-entry.md)**
 	*   *Covers:* Bulk point submission, zero-points support, team-by-round point allocations, and retroactive point-in-time standings calculations.
 *   👉 **[Volunteer Points Auto-Sync](docs/features/volunteer-sync.md)**
@@ -62,10 +62,11 @@ Instead of scanning the codebase to reconstruct business logic, follow these spe
 *   👉 **[Maintenance Feature Specs](docs/features/maintenance.md)**
 	*   *Covers:* Intelligent automatic season generation (starting August 1), active state transitions, division preference cookieland (July 31 / Dec 31 lifecycle limits), and teams/divs CRUD rules with soft-delete safety bars.
 *   👉 **[Standings Calculation & Playoff Specs](docs/features/standings-view.md)**
-	*   *Covers:* Standard soccer points scoring matrices (3 pts Win, 1 pt Draw, 0 pts Loss), AYSO tie-breaker logic, end-of-season tournaments (`Bracket` and `PoolPlayWithFinal` with the AYSO 10-point system), and play-offs slot designations.
-	*   *TODOs:*
-		*   Implement `ITournamentBracketBuilder` classes for 3-, 4-, 5-, 7-, and 8-team divisions (6-team `SixTeamBracketBuilder` is implemented for the current season).
-		*   Add a manual tiebreaker override input for cascading regular-season playoff berths if teams remain tied after Game Points and Head-to-Head results.
+	*   *Covers:* Standard soccer points scoring matrices (3 pts Win, 1 pt Draw, 0 pts Loss), AYSO tie-breaker logic, standings adjustments for divisions with an odd number of teams, and play-offs slot designations.
+	*   *TODO:* Add a manual tiebreaker override input for cascading regular-season playoff berths if teams remain tied after Game Points and Head-to-Head results.
+*   👉 **[End-of-Season Tournaments Specs](docs/features/tournaments.md)**
+	*   *Covers:* Division tournament formats (`None`, `Bracket`, `PoolPlayWithFinal`), Round 9 seeding & on-demand bracket generation, single-elimination brackets with penalty shootouts, pool play using the AYSO 10-point system (forfeits, red/yellow cards, and tie-breakers), and tournament champion playoff berth cascading.
+	*   *TODO:* Implement `ITournamentBracketBuilder` classes for 3-, 4-, 5-, 7-, and 8-team divisions (6-team `SixTeamBracketBuilder` is implemented for the current season).
 
 ---
 
